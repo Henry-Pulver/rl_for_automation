@@ -12,7 +12,7 @@ MAX_SPEED = 0.07
 GOAL_POSITION = 0.5
 
 POSITION_VALUES = np.linspace(MIN_POSITION, MAX_POSITION, 200)  # 100 possible positions
-VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 100)  # 50 possible velocities
+VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 140)  # 50 possible velocities
 STATE_SPACE = np.array([np.array([pos, vel]) for vel in VELOCITY_VALUES for pos in POSITION_VALUES])
 
 POSITION_SPACING = (POSITION_VALUES[1] - POSITION_VALUES[0]) / 2
@@ -20,6 +20,8 @@ VELOCITY_SPACING = (VELOCITY_VALUES[1] - VELOCITY_VALUES[0]) / 2
 
 SAVE_LOCATION1 = "value_fn/value.npy"
 SAVE_LOCATION2 = "value_fn/v100_x200.npy"
+SAVE_LOCATION3 = "value_fn/v140_x200.npy"
+SAVE_LOCATION4 = "value_fn/v200_x400.npy"
 # print("pspace", POSITION_SPACING)
 # print("vspace", VELOCITY_SPACING)
 
@@ -65,8 +67,8 @@ def get_new_state_refs(state: np.array, actions: np.array) -> np.array:
 def value_iteration() -> np.array:
     # Initialise variables
     theta = 0.5
-    value_fn = np.load(SAVE_LOCATION2)
-    # value_fn = np.zeros(STATE_SPACE.shape[0])
+    # value_fn = np.load(SAVE_LOCATION3)
+    value_fn = np.zeros(STATE_SPACE.shape[0])
     iteration_count = 0
 
     try:
@@ -88,42 +90,42 @@ def value_iteration() -> np.array:
                     print(value_fn)
                 if iteration_count % 20 == 1:
                     print("saving...")
-                    np.save(SAVE_LOCATION2, value_fn)
+                    np.save(SAVE_LOCATION3, value_fn)
 
             if delta < theta:  # or iteration_count > 200:
                 break
 
     finally:
-        np.save(SAVE_LOCATION2, value_fn)
+        np.save(SAVE_LOCATION3, value_fn)
 
     print("value function: \n", value_fn)
-    np.save(SAVE_LOCATION2, value_fn)
+    np.save(SAVE_LOCATION3, value_fn)
     return value_fn
 
 
 def main():
-    # value_fn = value_iteration()
-    value_fn = np.load(SAVE_LOCATION2)
+    value_fn = value_iteration()
+    # value_fn = np.load(SAVE_LOCATION3)
 
-    env = gym.make('MountainCar-v0').env
-    state = env.reset()
-    done = False
-    total_reward = 0
-
-    while not done:
-        env.render()
-        outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
-        outcome_state_values = value_fn[outcome_state_refs]
-        best_actions = [action for action, value in
-                        zip(ACTION_SPACE, outcome_state_values)
-                        if value == max(outcome_state_values)]
-        action_chosen = random.choice(best_actions)
-        state, reward, done, info = env.step(action_chosen)
-        total_reward += reward
-
-    env.close()
-    print("final reward = ", total_reward)
-    print("final state = ", state)
+    # env = gym.make('MountainCar-v0').env
+    # state = env.reset()
+    # done = False
+    # total_reward = 0
+    #
+    # while not done:
+    #     env.render()
+    #     outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
+    #     outcome_state_values = value_fn[outcome_state_refs]
+    #     best_actions = [action for action, value in
+    #                     zip(ACTION_SPACE, outcome_state_values)
+    #                     if value == max(outcome_state_values)]
+    #     action_chosen = random.choice(best_actions)
+    #     state, reward, done, info = env.step(action_chosen)
+    #     total_reward += reward
+    #
+    # env.close()
+    # print("final reward = ", total_reward)
+    # print("final state = ", state)
 
 
 if __name__ == "__main__":
