@@ -113,9 +113,10 @@ def main():
     while not done:
         env.render()
         outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
-        rewards = calculate_rewards(STATE_SPACE[outcome_state_refs]) + value_fn[outcome_state_refs]
-        best_actions = [action for action, reward in zip(ACTION_SPACE, rewards)
-                        if reward == max(rewards)]
+        outcome_state_values = value_fn[outcome_state_refs]
+        best_actions = [action for action, value in
+                        zip(ACTION_SPACE, outcome_state_values)
+                        if value == max(outcome_state_values)]
         action_chosen = random.choice(best_actions)
         state, reward, done, info = env.step(action_chosen)
         total_reward += reward
