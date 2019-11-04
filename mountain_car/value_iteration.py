@@ -11,8 +11,8 @@ MAX_POSITION = 0.6
 MAX_SPEED = 0.07
 GOAL_POSITION = 0.5
 
-POSITION_VALUES = np.linspace(MIN_POSITION, MAX_POSITION, 200)  # 100 possible positions
-VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 100)  # 50 possible velocities
+POSITION_VALUES = np.linspace(MIN_POSITION, MAX_POSITION, 200)  # number of possible positions
+VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 140)  # number of possible velocities
 STATE_SPACE = np.array([np.array([pos, vel]) for vel in VELOCITY_VALUES for pos in POSITION_VALUES])
 
 POSITION_SPACING = (POSITION_VALUES[1] - POSITION_VALUES[0]) / 2
@@ -20,7 +20,7 @@ VELOCITY_SPACING = (VELOCITY_VALUES[1] - VELOCITY_VALUES[0]) / 2
 
 SAVE_LOCATION1 = "value_fn/value.npy"
 SAVE_LOCATION2 = "value_fn/v100_x200.npy"
-SAVE_LOCATION3 = "value_fn/v140_x200.npy"
+FINAL_SAVE_LOCATION = "value_fn/v140_x200.npy"
 SAVE_LOCATION4 = "value_fn/v200_x400.npy"
 # print("pspace", POSITION_SPACING)
 # print("vspace", VELOCITY_SPACING)
@@ -67,8 +67,8 @@ def get_new_state_refs(state: np.array, actions: np.array) -> np.array:
 def value_iteration() -> np.array:
     # Initialise variables
     theta = 0.5
-    # value_fn = np.load(SAVE_LOCATION3)
-    value_fn = np.zeros(STATE_SPACE.shape[0])
+    value_fn = np.load(FINAL_SAVE_LOCATION)
+    # value_fn = np.zeros(STATE_SPACE.shape[0])
     iteration_count = 0
 
     try:
@@ -90,23 +90,22 @@ def value_iteration() -> np.array:
                     print(value_fn)
                 if iteration_count % 20 == 1:
                     print("saving...")
-                    np.save(SAVE_LOCATION3, value_fn)
+                    np.save(FINAL_SAVE_LOCATION, value_fn)
 
             if delta < theta:  # or iteration_count > 200:
                 break
 
     finally:
-        np.save(SAVE_LOCATION3, value_fn)
+        np.save(FINAL_SAVE_LOCATION, value_fn)
 
     print("value function: \n", value_fn)
-    np.save(SAVE_LOCATION3, value_fn)
+    np.save(FINAL_SAVE_LOCATION, value_fn)
     return value_fn
 
 
 def main():
     # value_fn = value_iteration()
-    value_fn = np.load(SAVE_LOCATION2)
-    print(STATE_SPACE)
+    value_fn = np.load(FINAL_SAVE_LOCATION)
     env = gym.make('MountainCar-v0').env
     state = env.reset()
     done = False

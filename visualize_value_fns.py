@@ -35,25 +35,20 @@ def show_quiver_plot():
     pass
 
 
-def show_policy(value_fn: np.array, action_space: np.array):
+# def show_policy(value_fn: np.array, action_space: np.array):
 
 
 
 def main():
-    value_fn_data = load_data(Path("mountain_car/value_fn/v100_x200.npy"))
-    value_fn_data = value_fn_data.reshape((100, 200))
+    value_fn_data = load_data(Path("mountain_car/value_fn/v140_x200.npy"))
+    value_fn_data = value_fn_data.reshape((140, 200))
     # print(STATE_SPACE)
-    positions = np.array([state[0] for state in STATE_SPACE]).reshape((100, 200))
+    positions = np.array([state[0] for state in STATE_SPACE]).reshape((140, 200))
     # print(positions)
-    velocities = np.array([state[1] for state in STATE_SPACE]).reshape((100, 200))
+    velocities = np.array([state[1] for state in STATE_SPACE]).reshape((140, 200))
     # print(velocities[:100])
     # print(velocities)
     show_contours(x_data=positions, y_data=velocities, z_data=value_fn_data)
-
-
-
-
-
 
 
 if __name__ == "__main__":
