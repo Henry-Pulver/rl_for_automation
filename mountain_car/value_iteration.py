@@ -12,7 +12,7 @@ MAX_SPEED = 0.07
 GOAL_POSITION = 0.5
 
 POSITION_VALUES = np.linspace(MIN_POSITION, MAX_POSITION, 200)  # 100 possible positions
-VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 140)  # 50 possible velocities
+VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 100)  # 50 possible velocities
 STATE_SPACE = np.array([np.array([pos, vel]) for vel in VELOCITY_VALUES for pos in POSITION_VALUES])
 
 POSITION_SPACING = (POSITION_VALUES[1] - POSITION_VALUES[0]) / 2
@@ -104,28 +104,28 @@ def value_iteration() -> np.array:
 
 
 def main():
-    value_fn = value_iteration()
-    # value_fn = np.load(SAVE_LOCATION3)
+    # value_fn = value_iteration()
+    value_fn = np.load(SAVE_LOCATION2)
+    print(STATE_SPACE)
+    env = gym.make('MountainCar-v0').env
+    state = env.reset()
+    done = False
+    total_reward = 0
 
-    # env = gym.make('MountainCar-v0').env
-    # state = env.reset()
-    # done = False
-    # total_reward = 0
-    #
-    # while not done:
-    #     env.render()
-    #     outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
-    #     outcome_state_values = value_fn[outcome_state_refs]
-    #     best_actions = [action for action, value in
-    #                     zip(ACTION_SPACE, outcome_state_values)
-    #                     if value == max(outcome_state_values)]
-    #     action_chosen = random.choice(best_actions)
-    #     state, reward, done, info = env.step(action_chosen)
-    #     total_reward += reward
-    #
-    # env.close()
-    # print("final reward = ", total_reward)
-    # print("final state = ", state)
+    while not done:
+        env.render()
+        outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
+        outcome_state_values = value_fn[outcome_state_refs]
+        best_actions = [action for action, value in
+                        zip(ACTION_SPACE, outcome_state_values)
+                        if value == max(outcome_state_values)]
+        action_chosen = random.choice(best_actions)
+        state, reward, done, info = env.step(action_chosen)
+        total_reward += reward
+
+    env.close()
+    print("final reward = ", total_reward)
+    print("final state = ", state)
 
 
 if __name__ == "__main__":
