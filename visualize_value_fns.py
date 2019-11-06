@@ -5,7 +5,8 @@ from pathlib import Path
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 
-from mountain_car.value_iteration import STATE_SPACE
+from mountain_car.value_iteration import STATE_SPACE, ACTION_SPACE
+from mountain_car.policy_iteration import policy_improvement
 
 
 def load_data(load_path: Path) -> np.array:
@@ -15,11 +16,11 @@ def load_data(load_path: Path) -> np.array:
         raise FileNotFoundError("load_path variable doesn't match a file that exists")
 
 
-def show_contours(x_data: np.array, y_data: np.array, z_data: np.array):
+def show_contours(x_data: np.array, y_data: np.array, z_data: np.array, title: str = 'Mountain Car Value Function', filename: str = 'mountain_car_value.html'):
     fig = go.Figure(data=[go.Surface(x=x_data, y=y_data, z=z_data)])
     fig.update_traces(contours_z=dict(show=True, usecolormap=True,
                                       highlightcolor="limegreen", project_z=True))
-    fig.update_layout(title='Mountain Car Value Function',
+    fig.update_layout(title=title,
                       margin=dict(l=65, r=50, b=65, t=60),
                       scene=dict(
                           xaxis=dict(nticks=10),
@@ -28,27 +29,57 @@ def show_contours(x_data: np.array, y_data: np.array, z_data: np.array):
                           yaxis_title='Velocity',
                           zaxis_title='Value',
                       ))
-    fig.write_html('mountain_car_value.html', auto_open=True)
+    fig.write_html(filename, auto_open=True)
 
 
-def show_quiver_plot():
-    pass
+# def show_quiver_plot():
+#     pass
 
 
-# def show_policy(value_fn: np.array, action_space: np.array):
+def show_policy(raw_policy: np.array):
+    for count, item in enumerate(raw_policy):
+        if item == [0, 1, 2]:
+            raw_policy[count] = 0.5
+        elif item == [0]:
+            raw_policy[count] = -2
+        elif item == [1]:
+            raw_policy[count] = 0
+        elif item == [2]:
+            raw_policy[count] = 2
+        elif item == [0, 1]:
+            raw_policy[count] = -1
+        elif item == [1, 2]:
+            raw_policy[count] = 1
+
+    return raw_policy.reshape((140, 200))
+    # count = 0
+    # for n in policy:
+    #     if len(n) > 1:
+    #         count += 1
+    #
+    # print(count)
+    # policy = policy.reshape((140, 200))
+    # show_contours(x_data=x_data, y_data=y_data, z_data=policy)
+
 
 
 
 def main():
     value_fn_data = load_data(Path("mountain_car/value_fn/v140_x200.npy"))
-    value_fn_data = value_fn_data.reshape((140, 200))
+    # _, policy = policy_improvement([ACTION_SPACE] * STATE_SPACE.shape[0], value_fn_data, save=True,
+    #                                save_location="mountain_car/value_fn/policy_v140_x200.npy")
+    policy = load_data(Path("mountain_car/value_fn/policy_v140_x200.npy"))
+    policy = show_policy(policy)
+
+    # value_fn_data = value_fn_data.reshape((140, 200))
     # print(STATE_SPACE)
     positions = np.array([state[0] for state in STATE_SPACE]).reshape((140, 200))
     # print(positions)
     velocities = np.array([state[1] for state in STATE_SPACE]).reshape((140, 200))
     # print(velocities[:100])
     # print(velocities)
-    show_contours(x_data=positions, y_data=velocities, z_data=value_fn_data)
+    # show_contours(x_data=positions, y_data=velocities, z_data=value_fn_data)
+    show_contours(x_data=positions, y_data=velocities, z_data=policy, title="Mountain Car Policy", filename="mountain_car_policy.html")
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ MAX_SPEED = 0.07
 GOAL_POSITION = 0.5
 
 POSITION_VALUES = np.linspace(MIN_POSITION, MAX_POSITION, 200)  # 200 discrete positions
-VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 100)  # 100 discrete velocities
+VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 140)  # 100 discrete velocities
 STATE_SPACE = np.array([np.array([pos, vel])
                         for vel in VELOCITY_VALUES
                         for pos in POSITION_VALUES])
@@ -80,17 +80,22 @@ def policy_evaluation(value_fn, policy):
     return value_fn
 
 
-def policy_improvement(policy, value_fn):
+def policy_improvement(policy: np.array, value_fn: np.array, save: bool,
+                       save_location: str = POLICY_SAVE_LOCATION):
     print("Policy improvement started!")
     policy_stable = True
     for count, state in enumerate(STATE_SPACE):
         old_action = policy[count]
-        outcome_state_refs = get_new_state_refs(state, policy[count])
-        policy[count] = np.where(value_fn[outcome_state_refs] ==
-                                 max(value_fn[outcome_state_refs]))[0]
+        outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
+        print("outcome_state_refs", outcome_state_refs)
+        print(np.where(value_fn[outcome_state_refs] ==
+                                 max(value_fn[outcome_state_refs])))
+        policy[count] = list(np.where(value_fn[outcome_state_refs] ==
+                                 max(value_fn[outcome_state_refs]))[0])
         if np.all(old_action == policy[count]):
             policy_stable = False
-    np.save(POLICY_SAVE_LOCATION, policy)
+    if save:
+        np.save(save_location, policy)
     print("Policy improvement is complete!")
     return policy_stable, policy
 
@@ -103,7 +108,7 @@ def policy_iteration() -> np.array:
 
     while True:
         value_fn = policy_evaluation(value_fn, policy)
-        policy_stable, policy = policy_improvement(policy, value_fn)
+        policy_stable, policy = policy_improvement(policy, value_fn, save=True)
         if policy_stable:
             break
 
