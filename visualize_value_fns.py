@@ -52,16 +52,6 @@ def show_policy(raw_policy: np.array):
             raw_policy[count] = 1
 
     return raw_policy.reshape((140, 200))
-    # count = 0
-    # for n in policy:
-    #     if len(n) > 1:
-    #         count += 1
-    #
-    # print(count)
-    # policy = policy.reshape((140, 200))
-    # show_contours(x_data=x_data, y_data=y_data, z_data=policy)
-
-
 
 
 def main():
