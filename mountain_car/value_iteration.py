@@ -1,22 +1,9 @@
 import numpy as np
 import gym
 import random
+from mountain_car_runner import CONSTS, DISC_CONSTS
 
 
-ACTION_SPACE = np.array([x for x in range(3)])
-GRAVITY = 0.0025
-FORCE = 0.001
-MIN_POSITION = -1.2
-MAX_POSITION = 0.6
-MAX_SPEED = 0.07
-GOAL_POSITION = 0.5
-
-POSITION_VALUES = np.linspace(MIN_POSITION, MAX_POSITION, 200)  # number of possible positions
-VELOCITY_VALUES = np.linspace(-MAX_SPEED, MAX_SPEED, 140)  # number of possible velocities
-STATE_SPACE = np.array([np.array([pos, vel]) for vel in VELOCITY_VALUES for pos in POSITION_VALUES])
-
-POSITION_SPACING = (POSITION_VALUES[1] - POSITION_VALUES[0]) / 2
-VELOCITY_SPACING = (VELOCITY_VALUES[1] - VELOCITY_VALUES[0]) / 2
 
 SAVE_LOCATION1 = "value_fn/value.npy"
 SAVE_LOCATION2 = "value_fn/v100_x200.npy"
@@ -45,11 +32,11 @@ SAVE_LOCATION4 = "value_fn/v200_x400.npy"
 #     def __init__(self, state_space: np.array):
 
 def get_state_refs(states: np.array) -> np.array:
-    return np.where(np.prod(abs(STATE_SPACE - states) <= np.array([POSITION_SPACING, VELOCITY_SPACING]), axis=-1))[1]
+    return np.where(np.prod(abs(DISC_CONSTS.STATE_SPACE - states) <= np.array([DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]), axis=-1))[1]
 
 
 def calculate_rewards(states: np.array) -> np.array:
-    return np.prod(states >= [0.5, -MAX_SPEED], axis=-1) - 1
+    return np.prod(states >= [0.5, -CONSTS.MAX_SPEED], axis=-1) - 1
 
 
 def get_new_state_refs(state: np.array, actions: np.array) -> np.array:
@@ -57,10 +44,10 @@ def get_new_state_refs(state: np.array, actions: np.array) -> np.array:
     positions += state[0]
     velocities += state[1]
 
-    velocities += (actions - 1) * FORCE + np.cos(3 * positions) * (-GRAVITY)
-    velocities = np.clip(velocities, -MAX_SPEED, MAX_SPEED)
+    velocities += (actions - 1) * CONSTS.FORCE + np.cos(3 * positions) * (-CONSTS.GRAVITY)
+    velocities = np.clip(velocities, -CONSTS.MAX_SPEED, CONSTS.MAX_SPEED)
     positions += velocities
-    positions = np.clip(positions, MIN_POSITION, MAX_POSITION)
+    positions = np.clip(positions, CONSTS.MIN_POSITION, CONSTS.MAX_POSITION)
     return get_state_refs(np.array([[positions], [velocities]]).T)
 
 
@@ -74,10 +61,10 @@ def value_iteration() -> np.array:
     try:
         while True:
             delta = 0
-            for count, state in enumerate(STATE_SPACE):
+            for count, state in enumerate(DISC_CONSTS.STATE_SPACE):
                 v = value_fn[count]
-                outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
-                rewards = calculate_rewards(STATE_SPACE[outcome_state_refs]) + value_fn[outcome_state_refs]
+                outcome_state_refs = get_new_state_refs(state, CONSTS.ACTION_SPACE)
+                rewards = calculate_rewards(DISC_CONSTS.STATE_SPACE[outcome_state_refs]) + value_fn[outcome_state_refs]
                 value_fn[count] = max(rewards)
                 delta = max(delta, abs(v - value_fn[count]))
 
@@ -103,6 +90,14 @@ def value_iteration() -> np.array:
     return value_fn
 
 
+def pick_action(state, value_fn):
+    outcome_state_refs = get_new_state_refs(state, DISC_CONSTS.ACTION_SPACE)
+    outcome_state_values = value_fn[outcome_state_refs]
+    return [action for action, value in
+            zip(DISC_CONSTS.ACTION_SPACE, outcome_state_values)
+            if value == max(outcome_state_values)]
+
+
 def main():
     # value_fn = value_iteration()
     value_fn = np.load(FINAL_SAVE_LOCATION)
@@ -113,11 +108,7 @@ def main():
 
     while not done:
         env.render()
-        outcome_state_refs = get_new_state_refs(state, ACTION_SPACE)
-        outcome_state_values = value_fn[outcome_state_refs]
-        best_actions = [action for action, value in
-                        zip(ACTION_SPACE, outcome_state_values)
-                        if value == max(outcome_state_values)]
+        best_actions = pick_action(state, value_fn)
         action_chosen = random.choice(best_actions)
         state, reward, done, info = env.step(action_chosen)
         total_reward += reward

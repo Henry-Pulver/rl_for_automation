@@ -5,7 +5,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 
-from mountain_car.value_iteration import STATE_SPACE, ACTION_SPACE
+from mountain_car.mountain_car_runner import CONSTS, DISC_CONSTS
 from mountain_car.policy_iteration import policy_improvement
 
 
@@ -63,9 +63,9 @@ def main():
 
     # value_fn_data = value_fn_data.reshape((140, 200))
     # print(STATE_SPACE)
-    positions = np.array([state[0] for state in STATE_SPACE]).reshape((140, 200))
+    positions = np.array([state[0] for state in DISC_CONSTS.STATE_SPACE]).reshape((len(DISC_CONSTS.VELOCITY_VALUES), len(DISC_CONSTS.POSITION_VALUES)))
     # print(positions)
-    velocities = np.array([state[1] for state in STATE_SPACE]).reshape((140, 200))
+    velocities = np.array([state[1] for state in DISC_CONSTS.STATE_SPACE]).reshape((140, 200))
     # print(velocities[:100])
     # print(velocities)
     # show_contours(x_data=positions, y_data=velocities, z_data=value_fn_data)

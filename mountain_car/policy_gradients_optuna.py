@@ -41,20 +41,19 @@ def get_action_probs(policy_weights, action_feature_vectors):
 
 
 class Policy:
-    # ALPHA_BASELINE = 2e-8
-    # ALPHA_POLICY = 1e-8
-    ALPHA_DECAY = 0.9999
+    # ALPHA_BASELINE = 2e-5
+    # ALPHA_POLICY = 1e-5
     GAMMA = 0.995
     action_space = DISC_CONSTS.ACTION_SPACE
-    baseline_save = "REINFORCE/baseline_weights_optuna1.npy"
-    policy_save = "REINFORCE/policy_weights_optuna1.npy"
 
-    def __init__(self, load_weights: bool, alpha_baseline: float, alpha_policy: float):
-        self.baseline_weights = np.load(self.baseline_save) if load_weights else np.random.normal(size=9)
-        self.policy_weights = np.load(self.policy_save) if load_weights else np.random.normal(size=27)
+    def __init__(self, load_weights: bool, alpha_baseline: float, alpha_policy: float, trial_no: int):
+        self.baseline_weights = np.load("REINFORCE/baseline_weights_human.npy") if load_weights else np.random.normal(size=9)
+        self.policy_weights = np.load("REINFORCE/policy_weights_human.npy") if load_weights else 0.5 * np.random.normal(size=27)
         self.memory_buffer = ExperienceBuffer()
         self.ALPHA_BASELINE = alpha_baseline
         self.ALPHA_POLICY = alpha_policy
+        self.baseline_save = f"REINFORCE/baseline_weights_optuna{trial_no}.npy"
+        self.policy_save = f"REINFORCE/policy_weights_optuna{trial_no}.npy"
 
     def choose_action(self, state):
         feature_vector = convert_to_basic_feature(state)
@@ -74,7 +73,6 @@ class Policy:
             returns = np.append(returns, np.sum(np.dot(future_rewards, gammas)))
             # print("returns: ", returns[-1])
             gammas = gammas[:-1]
-        # print(returns)
         return returns
 
     def gather_experience(self, env, time_limit):
@@ -94,11 +92,10 @@ class Policy:
             state, reward, done, info = env.step(action_chosen)
             total_reward += reward
             timesteps += 1
-
             if timesteps >= time_limit:
                 break
-        # if not done:
-        #     self.memory_buffer.rewards[-1] -= 199
+        if not done:
+            self.memory_buffer.rewards[-1] -= 200
         env.close()
         # print("Episode of experience over, total reward = ", total_reward)
         return total_reward
@@ -114,7 +111,6 @@ class Policy:
             # print("v", value)
             delta = returns[timestep] - value
             # print("d", delta)
-            # self.baseline_weights.astype(np.float64)
             self.baseline_weights += self.ALPHA_BASELINE * delta * basic_feature
             action_taken = self.memory_buffer.actions[timestep]
             # print("action_taken", action_taken)
@@ -122,14 +118,9 @@ class Policy:
             # print("action_features", action_features)
             action_probs = self.memory_buffer.action_probs[timestep]
             # print("action_probs", action_probs)
-            # print(action_features * action_probs.reshape((3,1)))
-            # print(action_features[action_taken])
-            # print(np.sum(action_features * action_probs.reshape((3,1)), axis=0))
             grad_ln_policy = action_features[action_taken] - np.sum(action_features * action_probs.reshape((3,1)), axis=0)
             # print(grad_ln_policy)
             self.policy_weights += self.ALPHA_POLICY * gammas[timestep] * delta * grad_ln_policy
-        self.ALPHA_BASELINE *= self.ALPHA_DECAY
-        self.ALPHA_POLICY *= self.ALPHA_DECAY
         # print("BL weights: ", self.baseline_weights)
         # print("Policy weights: ", self.policy_weights)
         self.memory_buffer.clear()
@@ -154,18 +145,46 @@ def sanity_check(baseline_load, policy_load):
         print(f"Point {count}:\n{point}\n{get_action_probs(policy_params, afv)}\n")
 
 
-def main():
-    # policy = np.array([0.0, 0.0, -10.0, 0.0, 0.0, -100.0, 0.0, 0.0, 0.0,
-    #                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    #                    2.0, 0.0, 10.0, 0.0, 0.0, 100.0, 0.0, 0.0, 0.0])
-    # baseline = np.array([-50.0, 100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    # np.save("REINFORCE/policy_weights_human.npy", policy)
-    # np.save("REINFORCE/baseline_weights_human.npy", baseline)
-
+def objective(trial):
+    learning_rate = trial.suggest_loguniform('learning_rate', 1e-12, 1e-2)
+    print(f"Initialising trial {trial.number}, alpha policy = {learning_rate}\n")
     env = gym.make('MountainCar-v0').env
-    policy = Policy(load_weights=True, alpha_baseline=5e-8, alpha_policy=2.5e-8)
+    policy = Policy(True, 2 * learning_rate, learning_rate, trial.number)
+    iteration_number = 0
+    moving_avg = -850
+    try:
+        while True:
+            total_reward = policy.gather_experience(env, 10000)
+            returns = policy.calculate_returns()
+            policy.update_weights(returns)
+
+            iteration_number += 1
+            moving_avg = 0.01 * total_reward + 0.99 * moving_avg
+
+            # Output progress
+            if iteration_number % 10 == 0:
+                print(f"Trial {trial.number}, Step: {iteration_number}\tAvg:{moving_avg}")
+                policy.save_weights()
+
+                # Report progress to pruner
+                trial.report(moving_avg, iteration_number)
+
+                # Handle pruning based on the intermediate value.
+                if trial.should_prune():
+                    raise optuna.structs.TrialPruned()
+
+            if iteration_number >= 200:
+                break
+    finally:
+        policy.save_weights()
+    return moving_avg
+
+
+def main():
+    # env = gym.make('MountainCar-v0').env
+    # policy = Policy(load_weights=True)
     # iteration_number = 0
-    # moving_avg = -650
+    # moving_avg = -10000
     #
     # try:
     #     while True:
@@ -173,21 +192,28 @@ def main():
     #         returns = policy.calculate_returns()
     #         policy.update_weights(returns)
     #
+    #         iteration_number += 1
     #         moving_avg = 0.01 * total_reward + 0.99 * moving_avg
     #         if iteration_number % 10 == 0:
-    #             # policy.save_weights()
-    #             print(f"Step: {iteration_number} \t Avg: {moving_avg} \t Alpha_policy: {policy.ALPHA_POLICY}")
-    #             # print("BL weights: ", policy.baseline_weights)
-    #             # print("Policy weights: ", policy.policy_weights)
-    #
-    #         iteration_number += 1
+    #             policy.save_weights()
+    #             print("iteration_number: ", iteration_number)
+    #             print("Moving avg:", moving_avg)
     #
     #         if abs(moving_avg) < 150:
     #             break
-    #         if iteration_number >= 10000:
-    #                 break
+    # #         if iteration_number >= 10000:
+    # #             break
     # finally:
     #     policy.save_weights()
+
+    study = optuna.create_study(pruner=optuna.pruners.PercentilePruner(66, n_warmup_steps=50), direction="maximize")
+    study.optimize(objective, n_trials=200, n_jobs=-1)
+                       # 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                       # 2, 0, 10, 0, 0, 100, 0, 0, 0])
+    # baseline = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0])
+    # np.save("REINFORCE/policy_weights_human.npy", policy)
+    # np.save("REINFORCE/baseline_weights_human.npy", baseline)
+
 
     # test_solution(policy.choose_action)
     # sanity_check("REINFORCE/baseline_weights2.npy", "REINFORCE/policy_weights2.npy")
