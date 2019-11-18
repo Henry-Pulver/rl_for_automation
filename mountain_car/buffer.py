@@ -5,6 +5,7 @@ class ExperienceBuffer:
     """
     Stores memory of past experience for model-free methods
     """
+
     def __init__(self):
         self.clear()
 
@@ -22,5 +23,3 @@ class ExperienceBuffer:
 
     def get_length(self):
         return len(self.states)
-
-

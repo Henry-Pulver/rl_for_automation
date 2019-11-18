@@ -16,19 +16,30 @@ def load_data(load_path: Path) -> np.array:
         raise FileNotFoundError("load_path variable doesn't match a file that exists")
 
 
-def show_contours(x_data: np.array, y_data: np.array, z_data: np.array, title: str = 'Mountain Car Value Function', filename: str = 'mountain_car_value.html'):
+def show_contours(
+    x_data: np.array,
+    y_data: np.array,
+    z_data: np.array,
+    title: str = "Mountain Car Value Function",
+    filename: str = "mountain_car_value.html",
+):
     fig = go.Figure(data=[go.Surface(x=x_data, y=y_data, z=z_data)])
-    fig.update_traces(contours_z=dict(show=True, usecolormap=True,
-                                      highlightcolor="limegreen", project_z=True))
-    fig.update_layout(title=title,
-                      margin=dict(l=65, r=50, b=65, t=60),
-                      scene=dict(
-                          xaxis=dict(nticks=10),
-                          yaxis=dict(nticks=10),
-                          xaxis_title='Position',
-                          yaxis_title='Velocity',
-                          zaxis_title='Value',
-                      ))
+    fig.update_traces(
+        contours_z=dict(
+            show=True, usecolormap=True, highlightcolor="limegreen", project_z=True
+        )
+    )
+    fig.update_layout(
+        title=title,
+        margin=dict(l=65, r=50, b=65, t=60),
+        scene=dict(
+            xaxis=dict(nticks=10),
+            yaxis=dict(nticks=10),
+            xaxis_title="Position",
+            yaxis_title="Velocity",
+            zaxis_title="Value",
+        ),
+    )
     fig.write_html(filename, auto_open=True)
 
 
@@ -63,13 +74,23 @@ def main():
 
     # value_fn_data = value_fn_data.reshape((140, 200))
     # print(STATE_SPACE)
-    positions = np.array([state[0] for state in DISC_CONSTS.STATE_SPACE]).reshape((len(DISC_CONSTS.VELOCITY_VALUES), len(DISC_CONSTS.POSITION_VALUES)))
+    positions = np.array([state[0] for state in DISC_CONSTS.STATE_SPACE]).reshape(
+        (len(DISC_CONSTS.VELOCITY_VALUES), len(DISC_CONSTS.POSITION_VALUES))
+    )
     # print(positions)
-    velocities = np.array([state[1] for state in DISC_CONSTS.STATE_SPACE]).reshape((140, 200))
+    velocities = np.array([state[1] for state in DISC_CONSTS.STATE_SPACE]).reshape(
+        (140, 200)
+    )
     # print(velocities[:100])
     # print(velocities)
     # show_contours(x_data=positions, y_data=velocities, z_data=value_fn_data)
-    show_contours(x_data=positions, y_data=velocities, z_data=policy, title="Mountain Car Policy", filename="mountain_car_policy.html")
+    show_contours(
+        x_data=positions,
+        y_data=velocities,
+        z_data=policy,
+        title="Mountain Car Policy",
+        filename="mountain_car_policy.html",
+    )
 
 
 if __name__ == "__main__":

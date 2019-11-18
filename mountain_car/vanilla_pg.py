@@ -16,17 +16,19 @@ def train(env_name, hidden_sizes, lr, epochs=100, batch_size=5000, render=False)
 
     # make environment, check spaces, get obs / act dims
     env = gym.make(env_name).env
-    assert isinstance(env.observation_space, Box), \
-        "This example only works for envs with continuous state spaces."
-    assert isinstance(env.action_space, Discrete), \
-        "This example only works for envs with discrete action spaces."
+    assert isinstance(
+        env.observation_space, Box
+    ), "This example only works for envs with continuous state spaces."
+    assert isinstance(
+        env.action_space, Discrete
+    ), "This example only works for envs with discrete action spaces."
 
     obs_dim = env.observation_space.shape[0]
     n_acts = env.action_space.n
 
     # make core of policy network
     obs_ph = tf.placeholder(shape=(None, obs_dim), dtype=tf.float32)
-    logits = mlp(obs_ph, sizes=hidden_sizes+[n_acts])
+    logits = mlp(obs_ph, sizes=hidden_sizes + [n_acts])
 
     # make action selection op (outputs int actions, sampled from policy)
     actions = tf.squeeze(tf.multinomial(logits=logits, num_samples=1), axis=1)
@@ -47,15 +49,15 @@ def train(env_name, hidden_sizes, lr, epochs=100, batch_size=5000, render=False)
     # for training policy
     def train_one_epoch():
         # make some empty lists for logging.
-        batch_obs = []          # for observations
-        batch_acts = []         # for actions
-        batch_weights = []      # for R(tau) weighting in policy gradient
-        batch_rets = []         # for measuring episode returns
-        batch_lens = []         # for measuring episode lengths
+        batch_obs = []  # for observations
+        batch_acts = []  # for actions
+        batch_weights = []  # for R(tau) weighting in policy gradient
+        batch_rets = []  # for measuring episode returns
+        batch_lens = []  # for measuring episode lengths
 
         # reset episode-specific variables
-        obs = env.reset()       # first obs comes from starting distribution
-        ep_rews = []            # list for rewards accrued throughout ep
+        obs = env.reset()  # first obs comes from starting distribution
+        ep_rews = []  # list for rewards accrued throughout ep
 
         # render first episode of each epoch
         finished_rendering_this_epoch = False
@@ -71,7 +73,7 @@ def train(env_name, hidden_sizes, lr, epochs=100, batch_size=5000, render=False)
             batch_obs.append(obs.copy())
 
             # act in the environment
-            act = sess.run(actions, {obs_ph: obs.reshape(1,-1)})[0]
+            act = sess.run(actions, {obs_ph: obs.reshape(1, -1)})[0]
             obs, rew, done, _ = env.step(act)
 
             # save action, reward
@@ -98,12 +100,14 @@ def train(env_name, hidden_sizes, lr, epochs=100, batch_size=5000, render=False)
                     break
 
         # take a single policy gradient update step
-        batch_loss, _ = sess.run([loss, train_op],
-                                 feed_dict={
-                                    obs_ph: np.array(batch_obs),
-                                    act_ph: np.array(batch_acts),
-                                    weights_ph: np.array(batch_weights)
-                                 })
+        batch_loss, _ = sess.run(
+            [loss, train_op],
+            feed_dict={
+                obs_ph: np.array(batch_obs),
+                act_ph: np.array(batch_acts),
+                weights_ph: np.array(batch_weights),
+            },
+        )
         return batch_loss, batch_rets, batch_lens
 
     moving_avg = 50000
@@ -111,7 +115,7 @@ def train(env_name, hidden_sizes, lr, epochs=100, batch_size=5000, render=False)
     for i in range(epochs):
         batch_loss, batch_rets, batch_lens = train_one_epoch()
         moving_avg = 0.025 * batch_lens[0] + moving_avg * 0.975
-        print(f'Trial: {i} \tep_len: {batch_lens[0]} \t moving avg: {moving_avg}')
+        print(f"Trial: {i} \tep_len: {batch_lens[0]} \t moving avg: {moving_avg}")
 
     def pick_action(observation):
         return sess.run(actions, {obs_ph: observation.reshape(1, -1)})[0]
@@ -119,12 +123,14 @@ def train(env_name, hidden_sizes, lr, epochs=100, batch_size=5000, render=False)
     test_solution(pick_action)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # import argparse
     # parser = argparse.ArgumentParser()
     # parser.add_argument('--env_name', '--env', type=str, default='MountainCar-v0')
     # parser.add_argument('--render', action='store_true')
     # parser.add_argument('--lr', type=float, default=1e-2)
     # args = parser.parse_args()
-    print('\nUsing simplest formulation of policy gradient.\n')
-    train(env_name='MountainCar-v0', hidden_sizes=[32, 32], lr=1e-8)  # env_name=args.env_name, render=args.render, lr=args.lr)
+    print("\nUsing simplest formulation of policy gradient.\n")
+    train(
+        env_name="MountainCar-v0", hidden_sizes=[32, 32], lr=1e-8
+    )  # env_name=args.env_name, render=args.render, lr=args.lr)

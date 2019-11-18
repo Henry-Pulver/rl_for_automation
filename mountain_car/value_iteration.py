@@ -4,7 +4,6 @@ import random
 from mountain_car_runner import CONSTS, DISC_CONSTS
 
 
-
 SAVE_LOCATION1 = "value_fn/value.npy"
 SAVE_LOCATION2 = "value_fn/v100_x200.npy"
 FINAL_SAVE_LOCATION = "value_fn/v140_x200.npy"
@@ -31,8 +30,15 @@ SAVE_LOCATION4 = "value_fn/v200_x400.npy"
 # class MountainCarValueIterator(ValueIterator):
 #     def __init__(self, state_space: np.array):
 
+
 def get_state_refs(states: np.array) -> np.array:
-    return np.where(np.prod(abs(DISC_CONSTS.STATE_SPACE - states) <= np.array([DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]), axis=-1))[1]
+    return np.where(
+        np.prod(
+            abs(DISC_CONSTS.STATE_SPACE - states)
+            <= np.array([DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]),
+            axis=-1,
+        )
+    )[1]
 
 
 def calculate_rewards(states: np.array) -> np.array:
@@ -44,7 +50,9 @@ def get_new_state_refs(state: np.array, actions: np.array) -> np.array:
     positions += state[0]
     velocities += state[1]
 
-    velocities += (actions - 1) * CONSTS.FORCE + np.cos(3 * positions) * (-CONSTS.GRAVITY)
+    velocities += (actions - 1) * CONSTS.FORCE + np.cos(3 * positions) * (
+        -CONSTS.GRAVITY
+    )
     velocities = np.clip(velocities, -CONSTS.MAX_SPEED, CONSTS.MAX_SPEED)
     positions += velocities
     positions = np.clip(positions, CONSTS.MIN_POSITION, CONSTS.MAX_POSITION)
@@ -64,7 +72,10 @@ def value_iteration() -> np.array:
             for count, state in enumerate(DISC_CONSTS.STATE_SPACE):
                 v = value_fn[count]
                 outcome_state_refs = get_new_state_refs(state, CONSTS.ACTION_SPACE)
-                rewards = calculate_rewards(DISC_CONSTS.STATE_SPACE[outcome_state_refs]) + value_fn[outcome_state_refs]
+                rewards = (
+                    calculate_rewards(DISC_CONSTS.STATE_SPACE[outcome_state_refs])
+                    + value_fn[outcome_state_refs]
+                )
                 value_fn[count] = max(rewards)
                 delta = max(delta, abs(v - value_fn[count]))
 
@@ -93,15 +104,17 @@ def value_iteration() -> np.array:
 def pick_action(state, value_fn):
     outcome_state_refs = get_new_state_refs(state, DISC_CONSTS.ACTION_SPACE)
     outcome_state_values = value_fn[outcome_state_refs]
-    return [action for action, value in
-            zip(DISC_CONSTS.ACTION_SPACE, outcome_state_values)
-            if value == max(outcome_state_values)]
+    return [
+        action
+        for action, value in zip(DISC_CONSTS.ACTION_SPACE, outcome_state_values)
+        if value == max(outcome_state_values)
+    ]
 
 
 def main():
     # value_fn = value_iteration()
     value_fn = np.load(FINAL_SAVE_LOCATION)
-    env = gym.make('MountainCar-v0').env
+    env = gym.make("MountainCar-v0").env
     state = env.reset()
     done = False
     total_reward = 0

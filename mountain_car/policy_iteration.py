@@ -8,8 +8,13 @@ POLICY_SAVE_LOCATION = "policy_iteration/policy.npy"
 
 
 def get_state_refs(states: np.array) -> np.array:
-    return np.where(np.prod(abs(DISC_CONSTS.STATE_SPACE - states)
-                            <= np.array([DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]), axis=-1))[1]
+    return np.where(
+        np.prod(
+            abs(DISC_CONSTS.STATE_SPACE - states)
+            <= np.array([DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]),
+            axis=-1,
+        )
+    )[1]
 
 
 def calculate_rewards(states: np.array) -> np.array:
@@ -21,7 +26,9 @@ def get_new_state_refs(state: np.array, actions: np.array) -> np.array:
     positions += state[0]
     velocities += state[1]
 
-    velocities += (actions - 1) * CONSTS.FORCE + np.cos(3 * positions) * (-CONSTS.GRAVITY)
+    velocities += (actions - 1) * CONSTS.FORCE + np.cos(3 * positions) * (
+        -CONSTS.GRAVITY
+    )
     velocities = np.clip(velocities, -CONSTS.MAX_SPEED, CONSTS.MAX_SPEED)
     positions += velocities
     positions = np.clip(positions, CONSTS.MIN_POSITION, CONSTS.MAX_POSITION)
@@ -38,8 +45,10 @@ def policy_evaluation(value_fn, policy):
             for count, state in enumerate(DISC_CONSTS.STATE_SPACE):
                 v = value_fn[count]
                 outcome_state_refs = get_new_state_refs(state, policy[count])
-                rewards = calculate_rewards(DISC_CONSTS.STATE_SPACE[outcome_state_refs]) \
-                          + value_fn[outcome_state_refs]
+                rewards = (
+                    calculate_rewards(DISC_CONSTS.STATE_SPACE[outcome_state_refs])
+                    + value_fn[outcome_state_refs]
+                )
                 value_fn[count] = np.sum(rewards) / len(policy[count])
                 delta = max(delta, abs(v - value_fn[count]))
 
@@ -63,18 +72,26 @@ def policy_evaluation(value_fn, policy):
     return value_fn
 
 
-def policy_improvement(policy: np.array, value_fn: np.array, save: bool,
-                       save_location: str = POLICY_SAVE_LOCATION):
+def policy_improvement(
+    policy: np.array,
+    value_fn: np.array,
+    save: bool,
+    save_location: str = POLICY_SAVE_LOCATION,
+):
     print("Policy improvement started!")
     policy_stable = True
     for count, state in enumerate(DISC_CONSTS.STATE_SPACE):
         old_action = policy[count]
         outcome_state_refs = get_new_state_refs(state, CONSTS.ACTION_SPACE)
         print("outcome_state_refs", outcome_state_refs)
-        print(np.where(value_fn[outcome_state_refs] ==
-                                 max(value_fn[outcome_state_refs])))
-        policy[count] = list(np.where(value_fn[outcome_state_refs] ==
-                                 max(value_fn[outcome_state_refs]))[0])
+        print(
+            np.where(value_fn[outcome_state_refs] == max(value_fn[outcome_state_refs]))
+        )
+        policy[count] = list(
+            np.where(value_fn[outcome_state_refs] == max(value_fn[outcome_state_refs]))[
+                0
+            ]
+        )
         if np.all(old_action == policy[count]):
             policy_stable = False
     if save:
@@ -104,15 +121,24 @@ def main():
     policy = policy_iteration()
     policy = np.load(POLICY_SAVE_LOCATION, allow_pickle=True)
 
-    env = gym.make('MountainCar-v0').env
+    env = gym.make("MountainCar-v0").env
     state = env.reset()
     done = False
     total_reward = 0
 
     while not done:
         env.render()
-        best_actions = policy[np.where(np.prod(abs(DISC_CONSTS.STATE_SPACE - state)
-                         <= np.array([DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]), axis=-1))[0]][0]
+        best_actions = policy[
+            np.where(
+                np.prod(
+                    abs(DISC_CONSTS.STATE_SPACE - state)
+                    <= np.array(
+                        [DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]
+                    ),
+                    axis=-1,
+                )
+            )[0]
+        ][0]
         action_chosen = random.choice(best_actions)
         print(action_chosen)
         state, reward, done, info = env.step(action_chosen)
