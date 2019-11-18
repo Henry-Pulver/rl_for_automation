@@ -11,6 +11,7 @@ class CONSTS:
     MAX_POSITION = 0.6
     MAX_SPEED = 0.07
     GOAL_POSITION = 0.5
+    STATE_SPACE_SIZE = 2
 
 
 POSITION_VALUES = np.linspace(
@@ -32,12 +33,13 @@ class DISC_CONSTS:
 
 def test_solution(pick_action: Callable, *args: Any) -> None:
     env = gym.make("MountainCar-v0").env
+    env = gym.Wrapper.Monitor(env, "successful recording")
     state = env.reset()
     done = False
     total_reward = 0
     try:
         while not done:
-            env.render()
+            env.render("rgb_array")
             best_actions = pick_action(state, *args)
             action_chosen = random.choice(
                 best_actions

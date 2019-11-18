@@ -101,8 +101,7 @@ class Policy:
         returns = np.array([])
         for timestep in range(episode_len):
             future_rewards = self.memory_buffer.rewards[timestep:]
-            returns = np.append(
-                returns, np.sum(np.dot(future_rewards, gammas)))
+            returns = np.append(returns, np.sum(np.dot(future_rewards, gammas)))
             gammas = gammas[:-1]
         return returns
 
