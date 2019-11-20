@@ -5,8 +5,9 @@ from pathlib import Path
 import plotly.graph_objects as go
 import plotly.figure_factory as ff
 
-from mountain_car.mountain_car_runner import CONSTS, DISC_CONSTS
+from mountain_car.mountain_car_runner import CONSTS, DISC_CONSTS, VELOCITY_VALUES, POSITION_VALUES
 from mountain_car.policy_iteration import policy_improvement
+from mountain_car.REINFORCE_actions import Policy
 
 
 def load_data(load_path: Path) -> np.array:
@@ -47,7 +48,7 @@ def show_contours(
 #     pass
 
 
-def show_policy(raw_policy: np.array):
+def show_discrete_policy(raw_policy: np.array):
     for count, item in enumerate(raw_policy):
         if item == [0, 1, 2]:
             raw_policy[count] = 0.5
@@ -65,17 +66,42 @@ def show_policy(raw_policy: np.array):
     return raw_policy.reshape((140, 200))
 
 
+def show_cts_policy(title: str,
+                    x_data,
+                    y_data,
+                    z_data: np.array):
+    fig = go.Figure()
+    for count, data in enumerate(z_data):
+        fig.add_trace(go.Surface(x=x_data, y=y_data, z=data, name=f"{count}"))
+    # fig.update_traces(
+    #     contours_z=dict(
+    #         show=True, usecolormap=True, highlightcolor="limegreen", project_z=True
+    #     )
+    # )
+    fig.update_layout(
+        title=title,
+        margin=dict(l=65, r=50, b=65, t=60),
+        scene=dict(
+            xaxis=dict(nticks=10),
+            yaxis=dict(nticks=10),
+            xaxis_title="Position",
+            yaxis_title="Velocity",
+            zaxis_title="Value",
+        ),
+    )
+    fig.write_html(f"{title}.html", auto_open=True)
+
 def main():
-    value_fn_data = load_data(Path("mountain_car/value_fn/v140_x200.npy"))
+    # value_fn_data = load_data(Path("mountain_car/value_fn/v140_x200.npy"))
     # _, policy = policy_improvement([ACTION_SPACE] * STATE_SPACE.shape[0], value_fn_data, save=True,
     #                                save_location="mountain_car/value_fn/policy_v140_x200.npy")
-    policy = load_data(Path("mountain_car/value_fn/policy_v140_x200.npy"))
-    policy = show_policy(policy)
+    # policy = load_data(Path("mountain_car/value_fn/policy_v140_x200.npy"))
+    # policy = show_discrete_policy(policy)
 
     # value_fn_data = value_fn_data.reshape((140, 200))
     # print(STATE_SPACE)
     positions = np.array([state[0] for state in DISC_CONSTS.STATE_SPACE]).reshape(
-        (len(DISC_CONSTS.VELOCITY_VALUES), len(DISC_CONSTS.POSITION_VALUES))
+        (len(VELOCITY_VALUES), len(POSITION_VALUES))
     )
     # print(positions)
     velocities = np.array([state[1] for state in DISC_CONSTS.STATE_SPACE]).reshape(
@@ -84,13 +110,28 @@ def main():
     # print(velocities[:100])
     # print(velocities)
     # show_contours(x_data=positions, y_data=velocities, z_data=value_fn_data)
-    show_contours(
-        x_data=positions,
-        y_data=velocities,
-        z_data=policy,
-        title="Mountain Car Policy",
-        filename="mountain_car_policy.html",
-    )
+    # show_contours(
+    #     x_data=positions,
+    #     y_data=velocities,
+    #     z_data=policy,
+    #     title="Mountain Car Policy",
+    #     filename="mountain_car_policy.html",
+    # )
+    ref_num = 2001
+    load_path = f"mountain_car/REINFORCE_actions/weights/{ref_num}"
+    policy = Policy(ref_num=0,
+                    alpha_baseline=1,
+                    alpha_policy=1,
+                    baseline_load=f"{load_path}/baseline_weights_{ref_num}.npy",
+                    policy_load=f"{load_path}/policy_weights_{ref_num}.npy")
+    z_data = np.array([policy.action_probs(state) for state in DISC_CONSTS.STATE_SPACE])
+    final_data = np.array([action.reshape((140, 200)) for action in z_data.T])
+
+    show_cts_policy(title="Current polynomial 2nd order Policy",
+                    x_data=positions,
+                    y_data=velocities,
+                    z_data=final_data
+                    )
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 report_materials/
-*.html
+.html
 *.npy
 
 # Byte-compiled / optimized / DLL files

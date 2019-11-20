@@ -1,17 +1,18 @@
 import numpy as np
 from typing import Optional, List
-import plotly.graph_objects as go
 from mountain_car_runner import DISC_CONSTS, test_solution
 from buffer import ExperienceBuffer
 import optuna
+import math
 import gym
+import os
+from tqdm import tqdm
 
 FEATURE_POLYNOMIAL_ORDER = 2
 
 
-def convert_to_basic_feature(observation: np.array) -> np.array:
-    assert observation.shape == (2,)
-    p, v = observation
+def convert_to_basic_feature(state: np.array) -> np.array:
+    p, v = state.T
     return np.array(
         [
             (p ** n1) * (v ** n2)
@@ -22,17 +23,18 @@ def convert_to_basic_feature(observation: np.array) -> np.array:
 
 
 def feature_to_action_feature(actions: np.array, feature: np.array) -> np.array:
-    all_action_features = np.zeros((len(actions), len(actions) * len(feature)))
+    all_action_features = np.zeros((actions.shape[-1], actions.shape[-1] * feature.shape[-1]))
     for action in actions:
         all_action_features[action][
-            action * len(feature) : len(feature) + action * len(feature)
+            action * len(feature): len(feature) + action * len(feature)
         ] = feature
     return all_action_features
 
 
 def get_action_probs(policy_weights, action_feature_vectors) -> np.array:
-    action_exponents = np.exp(np.matmul(action_feature_vectors, policy_weights))
-    return action_exponents / np.sum(action_exponents)
+    action_exponents = np.matmul(action_feature_vectors, policy_weights)
+    unnormalised_probs = np.exp(action_exponents - np.mean(action_exponents))
+    return unnormalised_probs / np.sum(unnormalised_probs)
 
 
 class Policy:
@@ -42,40 +44,34 @@ class Policy:
         self,
         alpha_baseline: float,
         alpha_policy: float,
-        trial: Optional = None,
-        baseline_save: Optional[str] = None,
-        policy_save: Optional[str] = None,
+        ref_num: int,
+        baseline_load: Optional[str] = None,
+        policy_load: Optional[str] = None,
         alpha_decay: Optional[float] = None,
         discount_factor: Optional[float] = None,
+        random_seed: Optional[int] = None,
     ) -> None:
         self.ALPHA_DECAY = alpha_decay if alpha_decay else 1
         assert self.ALPHA_DECAY <= 1
         self.GAMMA = discount_factor if discount_factor else 1
         assert self.GAMMA <= 1
-        self.trial = trial
-        if trial:
-            self.baseline_save = f"REINFORCE/baseline_weights_optuna{trial.number}.npy"
-            self.policy_save = f"REINFORCE/policy_weights_optuna{trial.number}.npy"
-        else:
-            self.baseline_save = (
-                baseline_save
-                if baseline_save
-                else f"REINFORCE/baseline_weights_p{FEATURE_POLYNOMIAL_ORDER}.npy"
-            )
-            self.policy_save = (
-                policy_save
-                if policy_save
-                else f"REINFORCE/policy_weights_p{FEATURE_POLYNOMIAL_ORDER}.npy"
-            )
+
+        self.plots_save = f"REINFORCE_actions/plots/{ref_num}"
+        self.weights_save = f"REINFORCE_actions/weights/{ref_num}"
+        os.makedirs(self.weights_save, exist_ok=True)
+        self.id = ref_num
+
         self.feature_size = (FEATURE_POLYNOMIAL_ORDER + 1) ** 2
+        if random_seed:
+            np.random.seed(random_seed)
         self.baseline_weights = (
-            np.load(self.baseline_save)
-            if baseline_save
+            np.load(baseline_load, allow_pickle=True)
+            if baseline_load
             else np.random.normal(size=self.feature_size)
         )
         self.policy_weights = (
-            np.load(self.policy_save)
-            if policy_save
+            np.load(policy_load, allow_pickle=True)
+            if policy_load
             else np.random.normal(size=len(self.action_space) * self.feature_size)
         )
         self.memory_buffer = ExperienceBuffer()
@@ -83,27 +79,34 @@ class Policy:
         self.ALPHA_POLICY = alpha_policy
         self.policy_plot = self.policy_weights
         self.baseline_plot = self.baseline_weights
+        self.avg_delta_plot = np.array([])
 
-    def choose_action(self, state: np.array) -> List:
+    def action_probs(self, state: np.array) -> np.array:
         feature_vector = convert_to_basic_feature(state)
         action_feature_vectors = feature_to_action_feature(
             self.action_space, feature_vector
         )
         action_probs = get_action_probs(self.policy_weights, action_feature_vectors)
-        return [np.random.choice(self.action_space, p=action_probs)]
+        action_probs = np.array(
+            [1 if math.isnan(prob) else prob for prob in action_probs])
+        return action_probs
+
+    def choose_action(self, state: np.array) -> List:
+        return [np.random.choice(self.action_space, p=self.action_probs(state))]
 
     def calculate_returns(self) -> np.array:
         episode_len = self.memory_buffer.get_length()
-
         gammas = np.logspace(
             0, np.log10(self.GAMMA ** (episode_len - 1)), num=episode_len
         )
-        returns = np.array([])
+        future_rewards = self.memory_buffer.get_rewards()
+        returns = []
         for timestep in range(episode_len):
-            future_rewards = self.memory_buffer.rewards[timestep:]
-            returns = np.append(returns, np.sum(np.dot(future_rewards, gammas)))
-            gammas = gammas[:-1]
-        return returns
+            returns.append(np.sum(np.dot(future_rewards, gammas)))
+            # Remove last element from gammas array, remove 1st element from rewards
+            np.delete(future_rewards, 0)
+            np.delete(gammas, -1)
+        return np.array(returns)
 
     def gather_experience(self, env: gym.Env, time_limit: int) -> float:
         state = env.reset()
@@ -111,11 +114,10 @@ class Policy:
         total_reward, reward, timesteps = 0, 0, 0
 
         while not done:
-            feature_vector = convert_to_basic_feature(state)
-            action_feature_vectors = feature_to_action_feature(
-                self.action_space, feature_vector
-            )
-            action_probs = get_action_probs(self.policy_weights, action_feature_vectors)
+            # print(action_probs)
+            action_probs = self.action_probs(state)
+            # print(action_probs)
+
             action_chosen = np.random.choice(self.action_space, p=action_probs)
 
             self.memory_buffer.update(state, action_chosen, action_probs, reward)
@@ -126,12 +128,16 @@ class Policy:
 
             if timesteps >= time_limit:
                 break
+        if not done:
+            self.memory_buffer.rewards[-1] = - (1 / (1 - self.GAMMA))
+            # self.memory_buffer.rewards[-1] = -5000
         env.close()
         # print("Episode of experience over, total reward = ", total_reward)
         return total_reward
 
-    def update_weights(self, returns: np.array) -> None:
+    def update_weights(self, returns: np.array, step: int) -> None:
         """"""
+        delta_sum = 0
         for timestep, state in enumerate(self.memory_buffer.states):
             basic_feature = convert_to_basic_feature(state)
             value = np.dot(self.baseline_weights, basic_feature)
@@ -152,40 +158,20 @@ class Policy:
             )
             # print(grad_ln_policy)
             self.policy_weights += self.ALPHA_POLICY * delta * grad_ln_policy
-        self.ALPHA_BASELINE *= self.ALPHA_DECAY
-        self.ALPHA_POLICY *= self.ALPHA_DECAY
+            delta_sum += delta
         self.baseline_plot = np.append(self.baseline_plot, self.baseline_weights)
         self.policy_plot = np.append(self.policy_plot, self.policy_weights)
-        self.save_plots()
+        self.avg_delta_plot = np.append(self.avg_delta_plot, delta_sum / self.memory_buffer.get_length())
         self.memory_buffer.clear()
+        self.ALPHA_BASELINE *= self.ALPHA_DECAY
+        self.ALPHA_POLICY *= self.ALPHA_DECAY
 
-    def save_weights(self) -> None:
-        np.save(self.baseline_save, self.baseline_weights)
-        np.save(self.policy_save, self.policy_weights)
-
-    def save_plots(self) -> None:
-        baseline_plot = self.baseline_plot.reshape(self.feature_size, -1).T
-        policy_plot = self.policy_plot.reshape(
-            self.feature_size * len(self.action_space), -1
-        ).T
-        if self.trial:
-            np.save(
-                f"REINFORCE_plots/optuna_baseline_plot_{self.trial.number}.npy",
-                baseline_plot,
-            )
-            np.save(
-                f"REINFORCE_plots/optuna_policy_plot_{self.trial.number}.npy",
-                policy_plot,
-            )
-        else:
-            np.save(
-                f"REINFORCE_plots/baseline_plot_p{FEATURE_POLYNOMIAL_ORDER}.npy",
-                baseline_plot,
-            )
-            np.save(
-                f"REINFORCE_plots/policy_plot_p{FEATURE_POLYNOMIAL_ORDER}.npy",
-                policy_plot,
-            )
+    def save(self) -> None:
+        np.save(f"{self.weights_save}/baseline_weights_{self.id}.npy", self.baseline_weights)
+        np.save(f"{self.weights_save}/policy_weights_{self.id}.npy", self.policy_weights)
+        np.save(f"{self.plots_save}/baseline_plot_{self.id}.npy", self.baseline_plot)
+        np.save(f"{self.plots_save}/policy_plot_{self.id}.npy", self.policy_plot)
+        np.save(f"{self.plots_save}/avg_delta_plot_{self.id}.npy", self.avg_delta_plot)
 
 
 def sanity_check(policy_load):
@@ -203,53 +189,51 @@ def train_policy(
     alpha_baseline: float,
     alpha_policy: float,
     num_steps: int,
+    episode_length: int,
     discount_factor: float,
     alpha_decay: float,
-    policy_save: Optional[str] = None,
-    baseline_save: Optional[str] = None,
+    policy_load: Optional[str] = None,
+    baseline_load: Optional[str] = None,
     trial: Optional = None,
-    ref_num: Optional = None,
+    ref_num: Optional[int] = None,
+    random_seed: Optional[int] = None,
 ):
-    ref_num = ref_num if ref_num else trial.number + 1 if trial else 0
+    ref_num = ref_num if ref_num else trial.number if trial else 0
     env = gym.make("MountainCar-v0").env
+    save_path = f"REINFORCE_actions/plots/{ref_num}"
+    os.makedirs(save_path, exist_ok=True)
+
     policy = Policy(
         alpha_baseline=alpha_baseline,
         alpha_policy=alpha_policy,
-        trial=trial,
-        policy_save=policy_save,
-        baseline_save=baseline_save,
+        policy_load=policy_load,
+        baseline_load=baseline_load,
         discount_factor=discount_factor,
         alpha_decay=alpha_decay,
+        ref_num=ref_num,
+        random_seed=random_seed,
     )
-    step = 0
-    # moving_avg = np.load(f"REINFORCE_plots/moving_avg_2.npy")
-    # rewards = np.load(f"REINFORCE_plots/returns_2.npy")
-    moving_avg = np.array([-10000])
-    rewards = np.array([-10000])
+    moving_avg = np.array([-episode_length])
+    rewards = np.array([-episode_length])
 
-    def save_plots():
-        if trial:
-            np.save(f"REINFORCE_plots/optuna_moving_avg_{ref_num}.npy", moving_avg)
-            np.save(f"REINFORCE_plots/optuna_returns_{ref_num}.npy", rewards)
-        else:
-            np.save(f"REINFORCE_plots/moving_avg_{ref_num}.npy", moving_avg)
-            np.save(f"REINFORCE_plots/returns_{ref_num}.npy", rewards)
+    def save_performance_plots():
+        np.save(f"{save_path}/moving_avg_{ref_num}.npy", moving_avg)
+        np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
 
     try:
-        while True:
-            total_reward = policy.gather_experience(env, 10000)
+        for step in tqdm(range(num_steps)):
+            total_reward = policy.gather_experience(env, episode_length)
             returns = policy.calculate_returns()
-            policy.update_weights(returns)
+            policy.update_weights(returns, step)
 
-            step += 1
             rewards = np.append(rewards, total_reward)
             moving_avg = np.append(
                 moving_avg, 0.01 * total_reward + 0.99 * moving_avg[-1]
             )
 
             if step % 10 == 0:
-                policy.save_weights()
-                save_plots()
+                policy.save()
+                save_performance_plots()
 
                 # Output progress message
                 print(
@@ -266,23 +250,23 @@ def train_policy(
 
             if abs(moving_avg[-1]) < 150:
                 print(
-                    f"Problem successfully solved - policy saved at {policy.policy_save}!"
+                    f"Problem successfully solved - policy saved at {policy.plots_save}!"
                 )
                 break
 
-            if step >= num_steps:
-                break
     finally:
-        policy.save_weights()
-        save_plots()
+        policy.save()
+        save_performance_plots()
     return moving_avg[-1]
 
 
 def objective(
     num_steps: int,
+    episode_length: int,
     trial: optuna.trial.Trial,
     policy_bounds: List[float],
     baseline_bounds: List[float],
+    random_seed: int,
 ):
     alpha_policy = trial.suggest_loguniform(
         "alpha_policy", policy_bounds[0], policy_bounds[1]
@@ -299,7 +283,9 @@ def objective(
         num_steps=num_steps,
         trial=trial,
         alpha_decay=0.9999,
-        discount_factor=1,
+        discount_factor=0.999,
+        episode_length=episode_length,
+        random_seed=random_seed,
     )
 
 
@@ -308,7 +294,9 @@ def optimise_alpha(
     policy_bounds: List[float],
     baseline_bounds: List[float],
     n_trials: int,
-    percentile_kept: float,
+    percentile_kept: float = 66,
+    random_seed: int = 0,
+    episode_length: int = 10000,
 ):
     study = optuna.create_study(
         pruner=optuna.pruners.PercentilePruner(
@@ -322,56 +310,12 @@ def optimise_alpha(
             trial=trial,
             policy_bounds=policy_bounds,
             baseline_bounds=baseline_bounds,
+            random_seed=random_seed,
+            episode_length=episode_length,
         ),
         n_trials=n_trials,
-        n_jobs=-1,
+        n_jobs=1,
     )
-
-
-def plot_conv_theta(filename: str) -> None:
-    fig = go.Figure()
-    y = np.load(f"REINFORCE_plots/baseline_plot_p3.npy").T
-    x = np.linspace(0, y.shape[1], y.shape[1] + 1)
-    for theta in y:
-        fig.add_trace(go.Scatter(x=x, y=theta))
-    fig.write_html(f"{filename}_baseline_plot_p3.html", auto_open=True)
-
-    fig = go.Figure()
-    y = np.load(f"REINFORCE_plots/policy_plot_p3.npy").T
-    x = np.linspace(0, y.shape[1], y.shape[1] + 1)
-    for theta in y:
-        fig.add_trace(go.Scatter(x=x, y=theta))
-    fig.write_html(f"{filename}_policy_plot_p3.html", auto_open=True)
-
-
-def plot_conv_performance(filename: str, ref_num: int) -> None:
-    fig = go.Figure()
-    y = np.load(f"REINFORCE_plots/moving_avg_{ref_num}.npy")
-    x = np.linspace(0, len(y), len(y) + 1)
-    fig.add_trace(go.Scatter(x=x, y=y))
-    fig.write_html(f"{filename}_moving_avg_{ref_num}.html", auto_open=True)
-
-    fig = go.Figure()
-    y = np.load(f"REINFORCE_plots/returns_{ref_num}.npy")
-    x = np.linspace(0, len(y), len(y) + 1)
-    fig.add_trace(go.Scatter(x=x, y=y))
-    fig.write_html(f"{filename}_returns_{ref_num}.html", auto_open=True)
-
-
-def plot_hyp_opt_performance(filename: str) -> None:
-    runs_finished = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14]
-    x = np.linspace(0, 200, 21)
-    fig = go.Figure()
-    for run_num in runs_finished:
-        y = np.load(f"REINFORCE_plots/optuna_moving_avg_{run_num}.npy")
-        fig.add_trace(go.Scatter(x=x, y=y, name=f"{run_num}"))
-    fig.write_html(f"{filename}_moving_avg.html", auto_open=True)
-    x = np.linspace(0, 200, 201)
-    fig = go.Figure()
-    for run_num in runs_finished:
-        y = np.load(f"REINFORCE_plots/optuna_returns_{run_num}.npy")
-        fig.add_trace(go.Scatter(x=x, y=y, name=f"{run_num}"))
-    fig.write_html(f"{filename}_returns.html", auto_open=True)
 
 
 def main():
@@ -379,21 +323,17 @@ def main():
     #     num_steps=250, policy_bounds=[1e-13, 1e-3], baseline_bounds=[1e-13, 1e-3], n_trials=40, percentile_kept=66
     # )
     train_policy(
-        alpha_baseline=1.1035831392989129e-12,
-        alpha_policy=3.6786104643296704e-12,
+        alpha_baseline=5e-6,
+        alpha_policy=5e-7,
         num_steps=100000,
-        alpha_decay=0.9999,
-        discount_factor=0.995,
-        ref_num=0,
-        policy_save="REINFORCE/policy_weights_p2.npy",
-        baseline_save="REINFORCE/baseline_weights_p2.npy",
+        alpha_decay=0.99999,
+        discount_factor=0.9999,
+        ref_num=2001,
+        episode_length=10000,
+        policy_load="REINFORCE_actions/weights/2000/policy_weights_2000.npy",
+        baseline_load="REINFORCE_actions/weights/2000/baseline_weights_2000.npy",
     )
-    # plot_conv_theta("theta_68400")
-    # plot_conv_performance("performance_68400", 3)
 
-    # plot_conv_theta("filename")
-
-    # plot_conv_performance("convergence_performance")
     # policy = Policy(baseline_save="REINFORCE/baseline_weights_p2.npy", policy_save="REINFORCE/policy_weights_p2.npy", alpha_baseline=1, alpha_policy=1)
     # test_solution(policy.choose_action)
     # sanity_check("REINFORCE/baseline_weights2.npy", "REINFORCE/policy_weights2.npy")

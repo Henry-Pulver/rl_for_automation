@@ -1,7 +1,7 @@
 import numpy as np
 import gym
 import random
-from mountain_car_runner import CONSTS, DISC_CONSTS
+from mountain_car_runner import CONSTS, DISC_CONSTS, test_solution
 
 
 SAVE_LOCATION1 = "value_fn/value.npy"
@@ -114,21 +114,7 @@ def pick_action(state, value_fn):
 def main():
     # value_fn = value_iteration()
     value_fn = np.load(FINAL_SAVE_LOCATION)
-    env = gym.make("MountainCar-v0").env
-    state = env.reset()
-    done = False
-    total_reward = 0
-
-    while not done:
-        env.render()
-        best_actions = pick_action(state, value_fn)
-        action_chosen = random.choice(best_actions)
-        state, reward, done, info = env.step(action_chosen)
-        total_reward += reward
-
-    env.close()
-    print("final reward = ", total_reward)
-    print("final state = ", state)
+    test_solution(lambda state: pick_action(state, value_fn), record_video=False)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ import numpy as np
 import random
 import gym
 from typing import Callable, Any
+import cv2
 
 
 class CONSTS:
@@ -31,15 +32,24 @@ class DISC_CONSTS:
     )
 
 
-def test_solution(pick_action: Callable, *args: Any) -> None:
+def test_solution(pick_action: Callable, record_video: bool, *args: Any) -> None:
     env = gym.make("MountainCar-v0").env
-    env = gym.Wrapper.Monitor(env, "successful recording")
+    render_type = "rgb_array" if record_video else "human"
+
+    if record_video:
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        video_fps = 60
+        out = cv2.VideoWriter('output.avi', fourcc, video_fps, (600, 400))
+
     state = env.reset()
     done = False
     total_reward = 0
     try:
         while not done:
-            env.render("rgb_array")
+            rgb_array = env.render(render_type)
+            if record_video:
+                bgr_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
+                out.write(bgr_array)
             best_actions = pick_action(state, *args)
             action_chosen = random.choice(
                 best_actions
@@ -49,4 +59,6 @@ def test_solution(pick_action: Callable, *args: Any) -> None:
         print("final reward = ", total_reward)
         print("final state = ", state)
     finally:
+        if record_video:
+            out.release()
         env.close()

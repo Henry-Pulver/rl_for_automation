@@ -1,14 +1,17 @@
 import numpy as np
 import plotly.graph_objects as go
 import os
-from REINFORCE_next_states import FEATURE_POLYNOMIAL_ORDER
+from mountain_car.REINFORCE_next_states import FEATURE_POLYNOMIAL_ORDER as state_poly_order
+from mountain_car.REINFORCE_actions import FEATURE_POLYNOMIAL_ORDER as action_poly_order
 
 
 def plot_weights_and_performance(
-    ref_num: int, opt: bool, feature_vector_size: int
+    ref_num: int, opt: bool, feature_vector_size: int, action_feature: bool
 ) -> None:
-    path = f"mountain_car/REINFORCE_states/plots"
+    REINFORCE_type = "REINFORCE_actions" if action_feature else "REINFORCE_states"
+    path = f"mountain_car/{REINFORCE_type}/plots/{ref_num}"
     opt_str = "optuna_" if opt else ""
+    action_feature_multiplier = 3 if action_feature else 1
 
     fig = go.Figure()
     y = np.load(f"{path}/{opt_str}baseline_plot_{ref_num}.npy").T
@@ -20,7 +23,7 @@ def plot_weights_and_performance(
 
     fig = go.Figure()
     y = np.load(f"{path}/{opt_str}policy_plot_{ref_num}.npy").T
-    y = y.reshape((-1, feature_vector_size)).T
+    y = y.reshape((-1, feature_vector_size * action_feature_multiplier)).T
     x = np.linspace(0, y.shape[1], y.shape[1] + 1)
     for theta in y:
         fig.add_trace(go.Scatter(x=x, y=theta))
@@ -38,9 +41,15 @@ def plot_weights_and_performance(
     fig.add_trace(go.Scatter(x=x, y=y))
     fig.write_html(f"{path}/{opt_str}returns_{ref_num}.html", auto_open=True)
 
+    fig = go.Figure()
+    y = np.load(f"{path}/{opt_str}avg_delta_plot_{ref_num}.npy")
+    x = np.linspace(0, y.shape[0], y.shape[0] + 1)
+    fig.add_trace(go.Scatter(x=x, y=y))
+    fig.write_html(f"{path}/{opt_str}avg_delta_plot_{ref_num}.html", auto_open=True)
 
-def plot_run() -> None:
-    root_dir = "mountain_car/REINFORCE_states/plots/0/1000"
+
+def plot_run(ref_num: int, trial_num: int) -> None:
+    root_dir = f"mountain_car/REINFORCE_states/plots/{ref_num}/{trial_num}"
     files = os.listdir(root_dir)
     for file in files:
         if not file.endswith(".npy"):
@@ -67,9 +76,12 @@ def plot_run() -> None:
 
 def main():
     plot_weights_and_performance(
-        ref_num=0, opt=True, feature_vector_size=(FEATURE_POLYNOMIAL_ORDER + 1) ** 2
+        ref_num=2001,
+        opt=False,
+        feature_vector_size=(action_poly_order + 1) ** 2,
+        action_feature=True,
     )
-    # plot_run()
+    # plot_run(ref_num=20, trial_num=800)
 
 
 if __name__ == "__main__":

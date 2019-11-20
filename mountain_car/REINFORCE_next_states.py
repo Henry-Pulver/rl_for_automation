@@ -76,8 +76,8 @@ class Policy:
         assert self.GAMMA <= 1
         self.trial = trial
         weights_path = "REINFORCE_states/weights"
+        self.id = ref_num if ref_num else self.trial.number if self.trial else -1
         if trial:
-            self.id = self.trial.number if self.trial else -1
             os.makedirs(f"{weights_path}/{self.id}", exist_ok=True)
             self.baseline_save = f"{weights_path}/{self.id}/baseline_weights_optuna.npy"
             self.policy_save = f"{weights_path}/{self.id}/policy_weights_optuna.npy"
@@ -157,7 +157,7 @@ class Policy:
             if timesteps >= time_limit:
                 break
         if not done:
-            self.memory_buffer.rewards[-1] = -999
+            self.memory_buffer.rewards[-1] = 1 - (1 / (1 - self.ALPHA_DECAY))
         env.close()
         # print("Episode of experience over, total reward = ", total_reward)
         return total_reward
@@ -395,25 +395,25 @@ def optimise_alpha(
 
 
 def main():
-    optimise_alpha(
-        num_steps=500,
-        baseline_bounds=[1e-12, 0.5e-3],
-        policy_bounds=[1e-12, 0.5e-3],
-        n_trials=100,
-        percentile_kept=66,
-        random_seed=0,
-    )
+    # optimise_alpha(
+    #     num_steps=500,
+    #     baseline_bounds=[1e-12, 0.5e-3],
+    #     policy_bounds=[1e-12, 0.5e-3],
+    #     n_trials=100,
+    #     percentile_kept=66,
+    #     random_seed=0,
+    # )
 
     # test_solution(policy.choose_action)
 
-    # train_policy(
-    #     alpha_baseline=1e-2,
-    #     alpha_policy=1e-2,
-    #     num_steps=1000,
-    #     alpha_decay=0.9999,
-    #     discount_factor=0.999,
-    #     ref_num=70,
-    # )
+    train_policy(
+        alpha_baseline=5e-5,
+        alpha_policy=2e-1,
+        num_steps=1000000,
+        alpha_decay=0.9999,
+        discount_factor=0.999,
+        ref_num=20,
+    )
 
     # sanity_check("REINFORCE_states/baseline_weights2.npy", "REINFORCE_states/policy_weights2.npy")
 
