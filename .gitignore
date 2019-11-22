@@ -1,6 +1,4 @@
 report_materials/
-.html
-*.npy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

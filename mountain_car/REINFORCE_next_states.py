@@ -61,7 +61,7 @@ class Policy:
 
     def __init__(
         self,
-        alpha_baseline: float,
+        alpha_baseline: Optional[float],
         alpha_policy: float,
         ref_num: int,
         baseline_load: Optional[str] = None,
@@ -79,22 +79,25 @@ class Policy:
         self.id = ref_num
         self.plots_save = f"{folder_path}/plots/{self.id}"
         self.weights_save = f"{folder_path}/weights/{self.id}"
-        os.makedirs(f"{self.plots_save}/{self.id}", exist_ok=True)
-        os.makedirs(f"{self.weights_save}/{self.id}", exist_ok=True)
+        os.makedirs(self.plots_save, exist_ok=True)
+        os.makedirs(self.weights_save, exist_ok=True)
 
         self.feature_size = (FEATURE_POLYNOMIAL_ORDER + 1) ** 2
         if random_seed is not None:
             np.random.seed(random_seed)
-        self.baseline_weights = (
-            np.load(baseline_load)
-            if baseline_load
-            else 10 * np.random.normal(size=self.feature_size)
-        )
-        self.policy_weights = (
+        self.policy_weights = (   # np.array([8.81451949, 9.16454747, -0.051268, 6.15630185, 7.01648719, -17.27751088, 8.85939796, -3.22674909, -3.97002752])
             np.load(policy_load)
             if policy_load
             else 10 * np.random.normal(size=self.feature_size)
         )
+        self.baseline_weights = (
+            np.load(baseline_load)
+            if baseline_load
+            else 10 * np.random.normal(size=self.feature_size)
+        ) if alpha_baseline is not None else None
+
+        # print("Policy weights: ", self.policy_weights)
+        # print("BL weights:", self.baseline_weights)
         self.memory_buffer = ExperienceBuffer()
         self.ALPHA_BASELINE = alpha_baseline
         self.ALPHA_POLICY = alpha_policy
@@ -162,13 +165,15 @@ class Policy:
         # print(f"Updating weights. Current policy value: {self.policy_weights}\n")
         states, actions, action_probs = self.memory_buffer.recall_memory()
         basic_features = convert_to_feature(states)
-        values = np.matmul(self.baseline_weights, basic_features.T)
-        # print(f"Values: {values}\nValues shape: {values.shape}\n")
-        deltas = returns - values
-        # print(f"Deltas: {deltas}\n")
-        delta_baseline = self.ALPHA_BASELINE * np.matmul(deltas, basic_features)
-        # print(f"delta_baseline: {delta_baseline}\n")
-        self.baseline_weights += delta_baseline
+
+        if self.ALPHA_BASELINE is not None:
+            values = np.matmul(self.baseline_weights, basic_features.T)
+            # print(f"Values: {values}\nValues shape: {values.shape}\n")
+            deltas = returns - values
+            # print(f"Deltas: {deltas}\n")
+            delta_baseline = self.ALPHA_BASELINE * np.matmul(deltas, basic_features)
+            # print(f"delta_baseline: {delta_baseline}\n")
+            self.baseline_weights += delta_baseline
         next_states = get_next_states(states, self.action_space)
         # print(f"Next states: {next_states}\n")
         next_feature_vectors = convert_to_feature(next_states)
@@ -182,43 +187,52 @@ class Policy:
             axis=1,
         )
         # print(f"Grad ln policy: {grad_ln_policy}")
-        self.policy_weights += self.ALPHA_POLICY * np.matmul(deltas, grad_ln_policy)
 
-        if save_data:
-            self.save_run_data(values, deltas, returns, step)
-        self.baseline_plot = np.append(self.baseline_plot, self.baseline_weights)
+        # Wait 20 steps for baseline to settle
+        if step > 20:
+            approx_value = deltas if self.ALPHA_BASELINE is not None else returns
+            self.policy_weights += self.ALPHA_POLICY * np.matmul(approx_value, grad_ln_policy)
+
+        # if save_data:
+        #     self.save_run_data(values, deltas, returns, step)
+
         self.policy_plot = np.append(self.policy_plot, self.policy_weights)
-        self.avg_delta_plot = np.append(self.avg_delta_plot, np.mean(deltas))
+        if self.ALPHA_BASELINE is not None:
+            self.baseline_plot = np.append(self.baseline_plot, self.baseline_weights)
+            self.avg_delta_plot = np.append(self.avg_delta_plot, np.mean(deltas))
+            self.ALPHA_BASELINE *= self.ALPHA_DECAY
         self.memory_buffer.clear()
-        self.ALPHA_BASELINE *= self.ALPHA_DECAY
         self.ALPHA_POLICY *= self.ALPHA_DECAY
 
-    def save_run_data(self, values, deltas, returns, step):
-        states, actions, action_probs = self.memory_buffer.recall_memory()
-        os.makedirs(f"REINFORCE_states/plots/{self.id}/{step}", exist_ok=True)
-        np.save(f"REINFORCE_states/plots/{self.id}/{step}/values.npy", values)
-        np.save(f"REINFORCE_states/plots/{self.id}/{step}/deltas.npy", deltas)
-        np.save(
-            f"REINFORCE_states/plots/{self.id}/{step}/states.npy", states,
-        )
-        np.save(
-            f"REINFORCE_states/plots/{self.id}/{step}/action_probs.npy", action_probs,
-        )
-        np.save(
-            f"REINFORCE_states/plots/{self.id}/{step}/actions.npy", actions,
-        )
-        np.save(
-            f"REINFORCE_states/plots/{self.id}/{step}/rewards.npy",
-            self.memory_buffer.get_rewards(),
-        )
-        np.save(f"REINFORCE_states/plots/{self.id}/{step}/returns.npy", returns)
+    # def save_run_data(self, values, deltas, returns, step):
+    #     states, actions, action_probs = self.memory_buffer.recall_memory()
+    #     os.makedirs(f"REINFORCE_states/plots/{self.id}/{step}", exist_ok=True)
+    #     np.save(f"REINFORCE_states/plots/{self.id}/{step}/values.npy", values)
+    #     np.save(f"REINFORCE_states/plots/{self.id}/{step}/deltas.npy", deltas)
+    #     np.save(
+    #         f"REINFORCE_states/plots/{self.id}/{step}/states.npy", states,
+    #     )
+    #     np.save(
+    #         f"REINFORCE_states/plots/{self.id}/{step}/action_probs.npy", action_probs,
+    #     )
+    #     np.save(
+    #         f"REINFORCE_states/plots/{self.id}/{step}/actions.npy", actions,
+    #     )
+    #     np.save(
+    #         f"REINFORCE_states/plots/{self.id}/{step}/rewards.npy",
+    #         self.memory_buffer.get_rewards(),
+    #     )
+    #     np.save(f"REINFORCE_states/plots/{self.id}/{step}/returns.npy", returns)
 
     def save(self) -> None:
-        np.save(f"{self.weights_save}/baseline_weights_{self.id}.npy", self.baseline_weights)
         np.save(f"{self.weights_save}/policy_weights_{self.id}.npy", self.policy_weights)
-        np.save(f"{self.plots_save}/baseline_plot_{self.id}.npy", self.baseline_plot)
         np.save(f"{self.plots_save}/policy_plot_{self.id}.npy", self.policy_plot)
-        np.save(f"{self.plots_save}/avg_delta_plot_{self.id}.npy", self.avg_delta_plot)
+        if self.ALPHA_BASELINE is not None:
+            np.save(f"{self.plots_save}/avg_delta_plot_{self.id}.npy", self.avg_delta_plot)
+            np.save(f"{self.plots_save}/baseline_plot_{self.id}.npy",
+                    self.baseline_plot)
+            np.save(f"{self.weights_save}/baseline_weights_{self.id}.npy",
+                    self.baseline_weights)
 
 
 def sanity_check(policy_load):
@@ -235,12 +249,12 @@ def sanity_check(policy_load):
 
 
 def train_policy(
-    alpha_baseline: float,
     alpha_policy: float,
     num_steps: int,
     episode_length: int,
     discount_factor: float,
     alpha_decay: float,
+    alpha_baseline: Optional[float] = None,
     policy_load: Optional[str] = None,
     baseline_load: Optional[str] = None,
     trial: Optional = None,
@@ -261,10 +275,8 @@ def train_policy(
         ref_num=ref_num,
         random_seed=random_seed,
     )
-    # moving_avg = np.array([-episode_length])
-    moving_avg = np.array([-500])
-    # rewards = np.array([-episode_length])
-    rewards = np.array([-500])
+    moving_avg = np.array([-episode_length])
+    rewards = np.array([-episode_length])
 
     def save_performance_plots():
             np.save(f"{save_path}/moving_avg_{ref_num}.npy", moving_avg)
@@ -379,18 +391,19 @@ def main():
     # )
 
     # test_solution(policy.choose_action)
-    load_ref_num = 41
-    load_path = f"REINFORCE_states/weights/{load_ref_num}"
+
+    # load_ref_num = 41
+    # load_path = f"REINFORCE_states/weights/{load_ref_num}"
     train_policy(
-        alpha_baseline=5e-5,
-        alpha_policy=1,
+        alpha_baseline=None,
+        alpha_policy=5,
         num_steps=1000000,
         episode_length=10000,
         alpha_decay=1,
         discount_factor=0.999,
-        ref_num=42,
-        policy_load=f"{load_path}/policy_weights_{load_ref_num}.npy",
-        baseline_load=f"{load_path}/baseline_weights_{load_ref_num}.npy",
+        ref_num=50 + 1,
+        # policy_load=f"{load_path}/policy_weights_{load_ref_num}.npy",
+        # baseline_load=f"{load_path}/baseline_weights_{load_ref_num}.npy",
     )
 
     # sanity_check("REINFORCE_states/baseline_weights2.npy", "REINFORCE_states/policy_weights2.npy")

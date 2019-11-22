@@ -1,25 +1,81 @@
 import numpy as np
 import plotly.graph_objects as go
 import os
+from typing import List
 from mountain_car.REINFORCE_next_states import FEATURE_POLYNOMIAL_ORDER as state_poly_order
 from mountain_car.REINFORCE_actions import FEATURE_POLYNOMIAL_ORDER as action_poly_order
 
 
+def plot_concatenated_weights_and_performance(
+    ref_num_list: List, opt: bool, feature_vector_size: int, action_feature: bool, baseline: bool
+) -> None:
+
+    REINFORCE_type = "REINFORCE_actions" if action_feature else "REINFORCE_states"
+    path = f"mountain_car/{REINFORCE_type}/plots/concatenated/"
+    opt_str = "optuna_" if opt else ""
+    action_feature_multiplier = 3 if action_feature else 1
+
+    if baseline:
+        fig = go.Figure()
+        y = np.load(f"{path}/{opt_str}baseline_plot_{ref_num_list[0]}-{ref_num_list[1]}.npy").T
+        y = y.reshape((-1, feature_vector_size)).T
+        x = np.linspace(0, y.shape[1], y.shape[1] + 1)
+        for theta in y:
+            fig.add_trace(go.Scatter(x=x, y=theta))
+        fig.write_html(f"{path}/{opt_str}baseline_plot_{ref_num_list[0]}-{ref_num_list[1]}.html", auto_open=True)
+
+        fig = go.Figure()
+        y = np.load(
+            f"{path}/{opt_str}avg_delta_plot_{ref_num_list[0]}-{ref_num_list[1]}.npy")
+        x = np.linspace(0, y.shape[0], y.shape[0] + 1)
+        fig.add_trace(go.Scatter(x=x, y=y))
+        fig.write_html(
+            f"{path}/{opt_str}avg_delta_plot_{ref_num_list[0]}-{ref_num_list[1]}.html",
+            auto_open=True)
+
+    fig = go.Figure()
+    y = np.load(f"{path}/{opt_str}policy_plot_{ref_num_list[0]}-{ref_num_list[1]}.npy").T
+    y = y.reshape((-1, feature_vector_size * action_feature_multiplier)).T
+    x = np.linspace(0, y.shape[1], y.shape[1] + 1)
+    for theta in y:
+        fig.add_trace(go.Scatter(x=x, y=theta))
+    fig.write_html(f"{path}/{opt_str}policy_plot_{ref_num_list[0]}-{ref_num_list[1]}.html", auto_open=True)
+
+    fig = go.Figure()
+    y = np.load(f"{path}/{opt_str}moving_avg_{ref_num_list[0]}-{ref_num_list[1]}.npy").T
+    x = np.linspace(0, y.shape[0], y.shape[0] + 1)
+    fig.add_trace(go.Scatter(x=x, y=y))
+    fig.write_html(f"{path}/{opt_str}moving_avg_{ref_num_list[0]}-{ref_num_list[1]}.html", auto_open=True)
+
+    fig = go.Figure()
+    y = np.load(f"{path}/{opt_str}returns_{ref_num_list[0]}-{ref_num_list[1]}.npy").T
+    x = np.linspace(0, y.shape[0], y.shape[0] + 1)
+    fig.add_trace(go.Scatter(x=x, y=y))
+    fig.write_html(f"{path}/{opt_str}returns_{ref_num_list[0]}-{ref_num_list[1]}.html", auto_open=True)
+
+
 def plot_weights_and_performance(
-    ref_num: int, opt: bool, feature_vector_size: int, action_feature: bool
+    ref_num: int, opt: bool, feature_vector_size: int, action_feature: bool, baseline: bool
 ) -> None:
     REINFORCE_type = "REINFORCE_actions" if action_feature else "REINFORCE_states"
     path = f"mountain_car/{REINFORCE_type}/plots/{ref_num}"
     opt_str = "optuna_" if opt else ""
     action_feature_multiplier = 3 if action_feature else 1
 
-    fig = go.Figure()
-    y = np.load(f"{path}/{opt_str}baseline_plot_{ref_num}.npy").T
-    y = y.reshape((-1, feature_vector_size)).T
-    x = np.linspace(0, y.shape[1], y.shape[1] + 1)
-    for theta in y:
-        fig.add_trace(go.Scatter(x=x, y=theta))
-    fig.write_html(f"{path}/{opt_str}baseline_plot_{ref_num}.html", auto_open=True)
+    if baseline:
+        fig = go.Figure()
+        y = np.load(f"{path}/{opt_str}baseline_plot_{ref_num}.npy").T
+        y = y.reshape((-1, feature_vector_size)).T
+        x = np.linspace(0, y.shape[1], y.shape[1] + 1)
+        for theta in y:
+            fig.add_trace(go.Scatter(x=x, y=theta))
+        fig.write_html(f"{path}/{opt_str}baseline_plot_{ref_num}.html", auto_open=True)
+
+        fig = go.Figure()
+        y = np.load(f"{path}/{opt_str}avg_delta_plot_{ref_num}.npy")
+        x = np.linspace(0, y.shape[0], y.shape[0] + 1)
+        fig.add_trace(go.Scatter(x=x, y=y))
+        fig.write_html(f"{path}/{opt_str}avg_delta_plot_{ref_num}.html", auto_open=True)
 
     fig = go.Figure()
     y = np.load(f"{path}/{opt_str}policy_plot_{ref_num}.npy").T
@@ -40,12 +96,6 @@ def plot_weights_and_performance(
     x = np.linspace(0, y.shape[0], y.shape[0] + 1)
     fig.add_trace(go.Scatter(x=x, y=y))
     fig.write_html(f"{path}/{opt_str}returns_{ref_num}.html", auto_open=True)
-
-    fig = go.Figure()
-    y = np.load(f"{path}/{opt_str}avg_delta_plot_{ref_num}.npy")
-    x = np.linspace(0, y.shape[0], y.shape[0] + 1)
-    fig.add_trace(go.Scatter(x=x, y=y))
-    fig.write_html(f"{path}/{opt_str}avg_delta_plot_{ref_num}.html", auto_open=True)
 
 
 def plot_run(ref_num: int, trial_num: int) -> None:
@@ -75,12 +125,22 @@ def plot_run(ref_num: int, trial_num: int) -> None:
 
 
 def main():
-    plot_weights_and_performance(
-        ref_num=42,
+    # plot_weights_and_performance(
+    #     ref_num=50,
+    #     opt=False,
+    #     feature_vector_size=(action_poly_order + 1) ** 2,
+    #     action_feature=False,
+    #     baseline=True
+    # )
+
+    plot_concatenated_weights_and_performance(
+        ref_num_list=[40, 41],
         opt=False,
         feature_vector_size=(action_poly_order + 1) ** 2,
         action_feature=False,
+        baseline=True
     )
+
     # plot_run(ref_num=20, trial_num=800)
 
 

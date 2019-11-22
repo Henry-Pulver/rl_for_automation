@@ -117,18 +117,17 @@ def main():
     #     title="Mountain Car Policy",
     #     filename="mountain_car_policy.html",
     # )
-    ref_num = 42
+    ref_num = 51
     load_path = f"mountain_car/REINFORCE_states/weights/{ref_num}"
     # load_path = f"mountain_car/REINFORCE_states/weights/human"
     policy = Policy(ref_num=0,
                     alpha_baseline=1,
                     alpha_policy=1,
-                    baseline_load=f"{load_path}/baseline_weights_{ref_num}.npy",
                     policy_load=f"{load_path}/policy_weights_{ref_num}.npy")
     z_data = np.array([policy.action_probs(state) for state in DISC_CONSTS.STATE_SPACE])
     final_data = np.array([action.reshape((140, 200)) for action in z_data.T])
 
-    show_cts_policy(title="REINFORCE States polynomial order 2 Policy",
+    show_cts_policy(title="REINFORCE States polynomial order 2 Policy without baseline",
                     x_data=positions,
                     y_data=velocities,
                     z_data=final_data
