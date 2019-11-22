@@ -7,7 +7,7 @@ import plotly.figure_factory as ff
 
 from mountain_car.mountain_car_runner import CONSTS, DISC_CONSTS, VELOCITY_VALUES, POSITION_VALUES
 from mountain_car.policy_iteration import policy_improvement
-from mountain_car.REINFORCE_actions import Policy
+from mountain_car.REINFORCE_next_states import Policy
 
 
 def load_data(load_path: Path) -> np.array:
@@ -117,8 +117,9 @@ def main():
     #     title="Mountain Car Policy",
     #     filename="mountain_car_policy.html",
     # )
-    ref_num = 2001
-    load_path = f"mountain_car/REINFORCE_actions/weights/{ref_num}"
+    ref_num = 42
+    load_path = f"mountain_car/REINFORCE_states/weights/{ref_num}"
+    # load_path = f"mountain_car/REINFORCE_states/weights/human"
     policy = Policy(ref_num=0,
                     alpha_baseline=1,
                     alpha_policy=1,
@@ -127,7 +128,7 @@ def main():
     z_data = np.array([policy.action_probs(state) for state in DISC_CONSTS.STATE_SPACE])
     final_data = np.array([action.reshape((140, 200)) for action in z_data.T])
 
-    show_cts_policy(title="Current polynomial 2nd order Policy",
+    show_cts_policy(title="REINFORCE States polynomial order 2 Policy",
                     x_data=positions,
                     y_data=velocities,
                     z_data=final_data
@@ -135,4 +136,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # policy_weights = np.array([0, 100, 100000, 1, 0, 0, 5, 0, 0])
+    # baseline_weights = np.array([-1000, 1.753, 1.673, 40, 0, 0, 200, 0, 0])
+    # np.save("mountain_car/REINFORCE_states/weights/human/policy_weights_0.npy", policy_weights)
+    # np.save("mountain_car/REINFORCE_states/weights/human/baseline_weights_0.npy", baseline_weights)
     main()

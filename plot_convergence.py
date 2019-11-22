@@ -76,10 +76,10 @@ def plot_run(ref_num: int, trial_num: int) -> None:
 
 def main():
     plot_weights_and_performance(
-        ref_num=2001,
+        ref_num=42,
         opt=False,
         feature_vector_size=(action_poly_order + 1) ** 2,
-        action_feature=True,
+        action_feature=False,
     )
     # plot_run(ref_num=20, trial_num=800)
 

@@ -1,11 +1,12 @@
 import os
 import numpy as np
+import math
+from tqdm import tqdm
 import gym
 from mountain_car_runner import DISC_CONSTS, CONSTS, test_solution
 from buffer import ExperienceBuffer
 from typing import Optional, List
 import optuna
-import plotly.graph_objects as go
 
 FEATURE_POLYNOMIAL_ORDER = 2
 
@@ -62,49 +63,36 @@ class Policy:
         self,
         alpha_baseline: float,
         alpha_policy: float,
-        trial: Optional = None,
-        baseline_save: Optional[str] = None,
-        policy_save: Optional[str] = None,
+        ref_num: int,
+        baseline_load: Optional[str] = None,
+        policy_load: Optional[str] = None,
         alpha_decay: Optional[float] = None,
         discount_factor: Optional[float] = None,
-        ref_num: Optional[int] = None,
         random_seed: Optional[int] = None,
     ):
         self.ALPHA_DECAY = alpha_decay if alpha_decay else 1
         assert self.ALPHA_DECAY <= 1
         self.GAMMA = discount_factor if discount_factor else 1
         assert self.GAMMA <= 1
-        self.trial = trial
-        weights_path = "REINFORCE_states/weights"
-        self.id = ref_num if ref_num else self.trial.number if self.trial else -1
-        if trial:
-            os.makedirs(f"{weights_path}/{self.id}", exist_ok=True)
-            self.baseline_save = f"{weights_path}/{self.id}/baseline_weights_optuna.npy"
-            self.policy_save = f"{weights_path}/{self.id}/policy_weights_optuna.npy"
-        else:
-            self.id = ref_num if ref_num else 0
-            self.baseline_save = (
-                baseline_save
-                if baseline_save
-                else f"{weights_path}/baseline_weights_p{FEATURE_POLYNOMIAL_ORDER}.npy"
-            )
-            self.policy_save = (
-                policy_save
-                if policy_save
-                else f"{weights_path}/policy_weights_p{FEATURE_POLYNOMIAL_ORDER}.npy"
-            )
-        self.feature_size = (FEATURE_POLYNOMIAL_ORDER + 1) ** 2
 
-        if random_seed:
+        folder_path = "REINFORCE_states"
+        self.id = ref_num
+        self.plots_save = f"{folder_path}/plots/{self.id}"
+        self.weights_save = f"{folder_path}/weights/{self.id}"
+        os.makedirs(f"{self.plots_save}/{self.id}", exist_ok=True)
+        os.makedirs(f"{self.weights_save}/{self.id}", exist_ok=True)
+
+        self.feature_size = (FEATURE_POLYNOMIAL_ORDER + 1) ** 2
+        if random_seed is not None:
             np.random.seed(random_seed)
         self.baseline_weights = (
-            np.load(self.baseline_save)
-            if baseline_save
+            np.load(baseline_load)
+            if baseline_load
             else 10 * np.random.normal(size=self.feature_size)
         )
         self.policy_weights = (
-            np.load(self.policy_save)
-            if policy_save
+            np.load(policy_load)
+            if policy_load
             else 10 * np.random.normal(size=self.feature_size)
         )
         self.memory_buffer = ExperienceBuffer()
@@ -112,11 +100,19 @@ class Policy:
         self.ALPHA_POLICY = alpha_policy
         self.policy_plot = self.policy_weights
         self.baseline_plot = self.baseline_weights
+        self.avg_delta_plot = np.array([])
 
-    def choose_action(self, state) -> List[int]:
+    def action_probs(self, state: np.array):
         next_states = get_next_states(state, self.action_space)
         next_feature_vectors = convert_to_feature(next_states)
         action_probs = get_action_probs(self.policy_weights, next_feature_vectors)
+        action_probs = np.array(
+            [1 if math.isnan(prob) else prob for prob in action_probs])
+        return action_probs
+
+    def choose_action(self, state: np.array) -> List[int]:
+        """For use with test_solution() function"""
+        action_probs = self.action_probs(state)
         return [np.random.choice(self.action_space, p=action_probs)]
 
     def calculate_returns(self) -> np.array:
@@ -141,10 +137,7 @@ class Policy:
         total_reward, reward, timesteps = 0, 0, 0
 
         while not done:
-            next_states = get_next_states(state, self.action_space)
-            # print("Next states:", next_states)
-            next_feature_vectors = convert_to_feature(next_states)
-            action_probs = get_action_probs(self.policy_weights, next_feature_vectors)
+            action_probs = self.action_probs(state)
             # print(action_probs)
             action_chosen = np.random.choice(self.action_space, p=action_probs)
 
@@ -157,7 +150,7 @@ class Policy:
             if timesteps >= time_limit:
                 break
         if not done:
-            self.memory_buffer.rewards[-1] = 1 - (1 / (1 - self.ALPHA_DECAY))
+            self.memory_buffer.rewards[-1] = - (1 / (1 - self.GAMMA))
         env.close()
         # print("Episode of experience over, total reward = ", total_reward)
         return total_reward
@@ -195,6 +188,7 @@ class Policy:
             self.save_run_data(values, deltas, returns, step)
         self.baseline_plot = np.append(self.baseline_plot, self.baseline_weights)
         self.policy_plot = np.append(self.policy_plot, self.policy_weights)
+        self.avg_delta_plot = np.append(self.avg_delta_plot, np.mean(deltas))
         self.memory_buffer.clear()
         self.ALPHA_BASELINE *= self.ALPHA_DECAY
         self.ALPHA_POLICY *= self.ALPHA_DECAY
@@ -219,28 +213,12 @@ class Policy:
         )
         np.save(f"REINFORCE_states/plots/{self.id}/{step}/returns.npy", returns)
 
-    def save_weights(self) -> None:
-        np.save(self.baseline_save, self.baseline_weights)
-        np.save(self.policy_save, self.policy_weights)
-
-    def save_param_plots(self) -> None:
-        if self.trial:
-            np.save(
-                f"REINFORCE_states/plots/optuna_baseline_plot_{self.id}.npy",
-                self.baseline_plot,
-            )
-            np.save(
-                f"REINFORCE_states/plots/optuna_policy_plot_{self.id}.npy",
-                self.policy_plot,
-            )
-        else:
-            np.save(
-                f"REINFORCE_states/plots/baseline_plot_{self.id}.npy",
-                self.baseline_plot,
-            )
-            np.save(
-                f"REINFORCE_states/plots/policy_plot_{self.id}.npy", self.policy_plot,
-            )
+    def save(self) -> None:
+        np.save(f"{self.weights_save}/baseline_weights_{self.id}.npy", self.baseline_weights)
+        np.save(f"{self.weights_save}/policy_weights_{self.id}.npy", self.policy_weights)
+        np.save(f"{self.plots_save}/baseline_plot_{self.id}.npy", self.baseline_plot)
+        np.save(f"{self.plots_save}/policy_plot_{self.id}.npy", self.policy_plot)
+        np.save(f"{self.plots_save}/avg_delta_plot_{self.id}.npy", self.avg_delta_plot)
 
 
 def sanity_check(policy_load):
@@ -260,58 +238,52 @@ def train_policy(
     alpha_baseline: float,
     alpha_policy: float,
     num_steps: int,
+    episode_length: int,
     discount_factor: float,
     alpha_decay: float,
-    policy_save: Optional[str] = None,
-    baseline_save: Optional[str] = None,
+    policy_load: Optional[str] = None,
+    baseline_load: Optional[str] = None,
     trial: Optional = None,
     ref_num: Optional[int] = None,
     random_seed: Optional[int] = None,
 ):
-    ref_num = ref_num if ref_num else trial.number + 1 if trial else 0
+    ref_num = ref_num if ref_num else trial.number if trial else 0
     env = gym.make("MountainCar-v0").env
+    save_path = f"REINFORCE_states/plots/{ref_num}"
+
     policy = Policy(
         alpha_baseline=alpha_baseline,
         alpha_policy=alpha_policy,
-        trial=trial,
-        policy_save=policy_save,
-        baseline_save=baseline_save,
+        policy_load=policy_load,
+        baseline_load=baseline_load,
         discount_factor=discount_factor,
         alpha_decay=alpha_decay,
         ref_num=ref_num,
         random_seed=random_seed,
     )
-    step = 0
-    moving_avg = np.array([-10000])
-    rewards = np.array([-10000])
+    # moving_avg = np.array([-episode_length])
+    moving_avg = np.array([-500])
+    # rewards = np.array([-episode_length])
+    rewards = np.array([-500])
 
     def save_performance_plots():
-        if trial:
-            np.save(
-                f"REINFORCE_states/plots/optuna_moving_avg_{ref_num - 1}.npy",
-                moving_avg,
-            )
-            np.save(f"REINFORCE_states/plots/optuna_returns_{ref_num - 1}.npy", rewards)
-        else:
-            np.save(f"REINFORCE_states/plots/moving_avg_{ref_num}.npy", moving_avg)
-            np.save(f"REINFORCE_states/plots/returns_{ref_num}.npy", rewards)
+            np.save(f"{save_path}/moving_avg_{ref_num}.npy", moving_avg)
+            np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
 
     try:
-        while True:
+        for step in tqdm(range(num_steps)):
             total_reward = policy.gather_experience(env, 10000)
             returns = policy.calculate_returns()
             policy.update_weights(returns, save_data=(step % 100 == 0), step=step)
 
-            step += 1
             rewards = np.append(rewards, total_reward)
             moving_avg = np.append(
                 moving_avg, 0.01 * total_reward + 0.99 * moving_avg[-1]
             )
 
             if step % 10 == 0:
-                policy.save_weights()
+                policy.save()
                 save_performance_plots()
-                policy.save_param_plots()
 
                 # Output progress message
                 print(
@@ -328,20 +300,19 @@ def train_policy(
 
             if abs(moving_avg[-1]) < 150:
                 print(
-                    f"Problem successfully solved - policy saved at {policy.policy_save}!"
+                    f"Problem successfully solved - policy saved at {policy.weights_save}!"
                 )
                 break
 
-            if step >= num_steps:
-                break
     finally:
-        policy.save_weights()
+        policy.save()
         save_performance_plots()
     return moving_avg[-1]
 
 
 def objective(
     num_steps: int,
+    episode_length: int,
     trial: optuna.trial.Trial,
     policy_bounds: List[float],
     baseline_bounds: List[float],
@@ -363,6 +334,7 @@ def objective(
         trial=trial,
         alpha_decay=0.9999,
         discount_factor=0.999,
+        episode_length=episode_length,
         random_seed=random_seed,
     )
 
@@ -374,6 +346,7 @@ def optimise_alpha(
     n_trials: int,
     percentile_kept: float,
     random_seed: int,
+    episode_length: int = 10000,
 ):
     study = optuna.create_study(
         pruner=optuna.pruners.PercentilePruner(
@@ -388,6 +361,7 @@ def optimise_alpha(
             policy_bounds=policy_bounds,
             baseline_bounds=baseline_bounds,
             random_seed=random_seed,
+            episode_length=episode_length,
         ),
         n_trials=n_trials,
         n_jobs=1,
@@ -405,14 +379,18 @@ def main():
     # )
 
     # test_solution(policy.choose_action)
-
+    load_ref_num = 41
+    load_path = f"REINFORCE_states/weights/{load_ref_num}"
     train_policy(
         alpha_baseline=5e-5,
-        alpha_policy=2e-1,
+        alpha_policy=1,
         num_steps=1000000,
-        alpha_decay=0.9999,
+        episode_length=10000,
+        alpha_decay=1,
         discount_factor=0.999,
-        ref_num=20,
+        ref_num=42,
+        policy_load=f"{load_path}/policy_weights_{load_ref_num}.npy",
+        baseline_load=f"{load_path}/baseline_weights_{load_ref_num}.npy",
     )
 
     # sanity_check("REINFORCE_states/baseline_weights2.npy", "REINFORCE_states/policy_weights2.npy")
