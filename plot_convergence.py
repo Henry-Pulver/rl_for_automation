@@ -67,8 +67,8 @@ def plot_weights_and_performance(
         y = np.load(f"{path}/{opt_str}baseline_plot_{ref_num}.npy").T
         y = y.reshape((-1, feature_vector_size)).T
         x = np.linspace(0, y.shape[1], y.shape[1] + 1)
-        for theta in y:
-            fig.add_trace(go.Scatter(x=x, y=theta))
+        for count, theta in enumerate(y):
+            fig.add_trace(go.Scatter(x=x, y=theta, name=f"theta_{count}"))
         fig.write_html(f"{path}/{opt_str}baseline_plot_{ref_num}.html", auto_open=True)
 
         fig = go.Figure()
@@ -81,8 +81,8 @@ def plot_weights_and_performance(
     y = np.load(f"{path}/{opt_str}policy_plot_{ref_num}.npy").T
     y = y.reshape((-1, feature_vector_size * action_feature_multiplier)).T
     x = np.linspace(0, y.shape[1], y.shape[1] + 1)
-    for theta in y:
-        fig.add_trace(go.Scatter(x=x, y=theta))
+    for count, theta in enumerate(y):
+        fig.add_trace(go.Scatter(x=x, y=theta, name=f"theta_{count}"))
     fig.write_html(f"{path}/{opt_str}policy_plot_{ref_num}.html", auto_open=True)
 
     fig = go.Figure()
@@ -115,8 +115,8 @@ def plot_run(ref_num: int, trial_num: int) -> None:
             elif y.shape[0] > 50000:
                 y = y.reshape((10000, 9)).T
                 x = np.linspace(0, y.shape[1], y.shape[1] + 1)
-                for theta in y:
-                    fig.add_trace(go.Scatter(x=x, y=theta,))
+                for count, theta in enumerate(y):
+                    fig.add_trace(go.Scatter(x=x, y=theta, name=f"theta_{count}"))
             else:
                 x = np.linspace(0, y.shape[0], y.shape[0] + 1)
                 fig.add_trace(go.Scatter(x=x, y=y))
@@ -125,21 +125,21 @@ def plot_run(ref_num: int, trial_num: int) -> None:
 
 
 def main():
-    # plot_weights_and_performance(
-    #     ref_num=50,
+    plot_weights_and_performance(
+        ref_num=51,
+        opt=False,
+        feature_vector_size=(action_poly_order + 1) ** 2,
+        action_feature=False,
+        baseline=False,
+    )
+
+    # plot_concatenated_weights_and_performance(
+    #     ref_num_list=[40, 41],
     #     opt=False,
     #     feature_vector_size=(action_poly_order + 1) ** 2,
     #     action_feature=False,
     #     baseline=True
     # )
-
-    plot_concatenated_weights_and_performance(
-        ref_num_list=[40, 41],
-        opt=False,
-        feature_vector_size=(action_poly_order + 1) ** 2,
-        action_feature=False,
-        baseline=True
-    )
 
     # plot_run(ref_num=20, trial_num=800)
 
