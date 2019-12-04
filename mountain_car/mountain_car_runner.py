@@ -1,8 +1,10 @@
 import numpy as np
 import random
 import gym
-from typing import Callable, Any
 import cv2
+from typing import Callable, Any, Optional
+
+from buffer import DemonstrationBuffer
 
 
 class CONSTS:
@@ -32,7 +34,7 @@ class DISC_CONSTS:
     )
 
 
-def test_solution(pick_action: Callable, record_video: bool, *args: Any) -> None:
+def test_solution(pick_action: Callable, record_video: bool, demo_buffer: Optional[DemonstrationBuffer] = None, *args: Any) -> None:
     env = gym.make("MountainCar-v0").env
     render_type = "rgb_array" if record_video else "human"
 
@@ -54,6 +56,8 @@ def test_solution(pick_action: Callable, record_video: bool, *args: Any) -> None
             action_chosen = random.choice(
                 best_actions
             )  # if best_actions else best_actions
+            if demo_buffer is not None:
+                demo_buffer.update(state, action_chosen)
             state, reward, done, info = env.step(action_chosen)
             total_reward += reward
         print("final reward = ", total_reward)
