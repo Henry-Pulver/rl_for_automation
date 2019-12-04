@@ -1,6 +1,5 @@
 import numpy as np
 from pathlib import Path
-from typing import Optional
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -22,7 +21,6 @@ class BCTrainer:
         self.demo_buffer = DemonstrationBuffer(demo_path)
 
         self.criterion = nn.CrossEntropyLoss()
-        # self.criterion = nn.MSELoss()
 
         # zero the parameter gradients
         self.optimizer = optim.Adam(self.network.parameters(), lr=learning_rate)
