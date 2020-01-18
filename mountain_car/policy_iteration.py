@@ -1,7 +1,7 @@
 import numpy as np
 import gym
 import random
-from mountain_car_runner import CONSTS, DISC_CONSTS
+from consts import CONSTS, DISC_CONSTS
 
 VALUE_SAVE_LOCATION = "policy_iteration/value.npy"
 POLICY_SAVE_LOCATION = "policy_iteration/policy.npy"
@@ -82,7 +82,7 @@ def policy_improvement(
     policy_stable = True
     for count, state in enumerate(DISC_CONSTS.STATE_SPACE):
         old_action = policy[count]
-        outcome_state_refs = get_new_state_refs(state, CONSTS.ACTION_SPACE)
+        outcome_state_refs = get_new_state_refs(state, DISC_CONSTS.ACTION_SPACE)
         print("outcome_state_refs", outcome_state_refs)
         print(
             np.where(value_fn[outcome_state_refs] == max(value_fn[outcome_state_refs]))

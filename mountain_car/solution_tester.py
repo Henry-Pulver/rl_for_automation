@@ -5,9 +5,37 @@ from mountain_car_runner import test_solution
 
 
 def make_hand_crafted_policy(policy_save: str):
-    policy = np.array([0, -100, 0, 0, 0, 0, 0, 0, 0,
-                       -10, 0, 0, 0, 0, 0, 0, 0, 0,
-                       2, 100, 0, 0, 0, 0, 0, 0, 0])
+    policy = np.array(
+        [
+            0,
+            -100,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            -10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            100,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+    )
     np.save(policy_save, policy)
 
 
@@ -18,11 +46,9 @@ def main():
     policy_save = f"REINFORCE_{algorithm_string}/weights/human/policy_weights_0.npy"
     Policy = StatePolicy if model_known else ActionPolicy
 
-    policy = Policy(alpha_policy=1e-2,
-                    alpha_baseline=1e-2,
-                    ref_num=1,
-                    policy_load=policy_save,
-                    )
+    policy = Policy(
+        alpha_policy=1e-2, alpha_baseline=1e-2, ref_num=1, policy_load=policy_save,
+    )
     test_solution(policy.choose_action, record_video=False)
 
 

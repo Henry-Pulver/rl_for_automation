@@ -3,8 +3,8 @@ import numpy as np
 import math
 from tqdm import tqdm
 import gym
-from mountain_car_runner import DISC_CONSTS, CONSTS, test_solution
-from buffer import ExperienceBuffer
+from consts import DISC_CONSTS, CONSTS
+from algorithms.buffer import ExperienceBuffer
 from typing import Optional, List
 import optuna
 
@@ -85,20 +85,26 @@ class Policy:
         self.feature_size = (FEATURE_POLYNOMIAL_ORDER + 1) ** 2
         if random_seed is not None:
             np.random.seed(random_seed)
-        self.policy_weights = (   # np.array([8.81451949, 9.16454747, -0.051268, 6.15630185, 7.01648719, -17.27751088, 8.85939796, -3.22674909, -3.97002752])
+        self.policy_weights = (  # np.array([8.81451949, 9.16454747, -0.051268, 6.15630185, 7.01648719, -17.27751088, 8.85939796, -3.22674909, -3.97002752])
             np.load(policy_load)
             if policy_load
             else 10 * np.random.normal(size=self.feature_size)
         )
         self.baseline_weights = (
-            np.load(baseline_load)
-            if baseline_load
-            else 10 * np.random.normal(size=self.feature_size)
-        ) if alpha_baseline is not None else None
+            (
+                np.load(baseline_load)
+                if baseline_load
+                else 10 * np.random.normal(size=self.feature_size)
+            )
+            if alpha_baseline is not None
+            else None
+        )
 
         # print("Policy weights: ", self.policy_weights)
         # print("BL weights:", self.baseline_weights)
-        self.memory_buffer = ExperienceBuffer()
+        self.memory_buffer = ExperienceBuffer(
+            action_space_size=3, state_dimension=CONSTS.STATE_SPACE_SIZE
+        )
         self.ALPHA_BASELINE = alpha_baseline
         self.ALPHA_POLICY = alpha_policy
         self.policy_plot = self.policy_weights
@@ -110,7 +116,8 @@ class Policy:
         next_feature_vectors = convert_to_feature(next_states)
         action_probs = get_action_probs(self.policy_weights, next_feature_vectors)
         action_probs = np.array(
-            [1 if math.isnan(prob) else prob for prob in action_probs])
+            [1 if math.isnan(prob) else prob for prob in action_probs]
+        )
         return action_probs
 
     def choose_action(self, state: np.array) -> List[int]:
@@ -153,7 +160,7 @@ class Policy:
             if timesteps >= time_limit:
                 break
         if not done:
-            self.memory_buffer.rewards[-1] = - (1 / (1 - self.GAMMA))
+            self.memory_buffer.rewards[-1] = -(1 / (1 - self.GAMMA))
         env.close()
         # print("Episode of experience over, total reward = ", total_reward)
         return total_reward
@@ -191,7 +198,9 @@ class Policy:
         # Wait 20 steps for baseline to settle
         if step > 20:
             approx_value = deltas if self.ALPHA_BASELINE is not None else returns
-            self.policy_weights += self.ALPHA_POLICY * np.matmul(approx_value, grad_ln_policy)
+            self.policy_weights += self.ALPHA_POLICY * np.matmul(
+                approx_value, grad_ln_policy
+            )
 
         # if save_data:
         #     self.save_run_data(values, deltas, returns, step)
@@ -225,14 +234,21 @@ class Policy:
     #     np.save(f"REINFORCE_states/plots/{self.id}/{step}/returns.npy", returns)
 
     def save(self) -> None:
-        np.save(f"{self.weights_save}/policy_weights_{self.id}.npy", self.policy_weights)
+        np.save(
+            f"{self.weights_save}/policy_weights_{self.id}.npy", self.policy_weights
+        )
         np.save(f"{self.plots_save}/policy_plot_{self.id}.npy", self.policy_plot)
         if self.ALPHA_BASELINE is not None:
-            np.save(f"{self.plots_save}/avg_delta_plot_{self.id}.npy", self.avg_delta_plot)
-            np.save(f"{self.plots_save}/baseline_plot_{self.id}.npy",
-                    self.baseline_plot)
-            np.save(f"{self.weights_save}/baseline_weights_{self.id}.npy",
-                    self.baseline_weights)
+            np.save(
+                f"{self.plots_save}/avg_delta_plot_{self.id}.npy", self.avg_delta_plot
+            )
+            np.save(
+                f"{self.plots_save}/baseline_plot_{self.id}.npy", self.baseline_plot
+            )
+            np.save(
+                f"{self.weights_save}/baseline_weights_{self.id}.npy",
+                self.baseline_weights,
+            )
 
 
 def sanity_check(policy_load):
@@ -279,8 +295,8 @@ def train_policy(
     rewards = np.array([-episode_length])
 
     def save_performance_plots():
-            np.save(f"{save_path}/moving_avg_{ref_num}.npy", moving_avg)
-            np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
+        np.save(f"{save_path}/moving_avg_{ref_num}.npy", moving_avg)
+        np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
 
     try:
         for step in tqdm(range(num_steps)):

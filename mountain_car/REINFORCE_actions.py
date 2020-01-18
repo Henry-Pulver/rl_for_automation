@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Optional, List
-from mountain_car_runner import DISC_CONSTS, test_solution
-from buffer import ExperienceBuffer
+from consts import DISC_CONSTS
+from algorithms.buffer import ExperienceBuffer
 import optuna
 import math
 import gym
@@ -23,10 +23,12 @@ def convert_to_basic_feature(state: np.array) -> np.array:
 
 
 def feature_to_action_feature(actions: np.array, feature: np.array) -> np.array:
-    all_action_features = np.zeros((actions.shape[-1], actions.shape[-1] * feature.shape[-1]))
+    all_action_features = np.zeros(
+        (actions.shape[-1], actions.shape[-1] * feature.shape[-1])
+    )
     for action in actions:
         all_action_features[action][
-            action * len(feature): len(feature) + action * len(feature)
+            action * len(feature) : len(feature) + action * len(feature)
         ] = feature
     return all_action_features
 
@@ -74,7 +76,7 @@ class Policy:
             if policy_load
             else np.random.normal(size=len(self.action_space) * self.feature_size)
         )
-        self.memory_buffer = ExperienceBuffer()
+        self.memory_buffer = ExperienceBuffer(action_space_size=3, state_dimension=(2,))
         self.ALPHA_BASELINE = alpha_baseline
         self.ALPHA_POLICY = alpha_policy
         self.policy_plot = self.policy_weights
@@ -88,7 +90,8 @@ class Policy:
         )
         action_probs = get_action_probs(self.policy_weights, action_feature_vectors)
         action_probs = np.array(
-            [1 if math.isnan(prob) else prob for prob in action_probs])
+            [1 if math.isnan(prob) else prob for prob in action_probs]
+        )
         return action_probs
 
     def choose_action(self, state: np.array) -> List:
@@ -129,7 +132,7 @@ class Policy:
             if timesteps >= time_limit:
                 break
         if not done:
-            self.memory_buffer.rewards[-1] = - (1 / (1 - self.GAMMA))
+            self.memory_buffer.rewards[-1] = -(1 / (1 - self.GAMMA))
             # self.memory_buffer.rewards[-1] = -5000
         env.close()
         # print("Episode of experience over, total reward = ", total_reward)
@@ -161,14 +164,20 @@ class Policy:
             delta_sum += delta
         self.baseline_plot = np.append(self.baseline_plot, self.baseline_weights)
         self.policy_plot = np.append(self.policy_plot, self.policy_weights)
-        self.avg_delta_plot = np.append(self.avg_delta_plot, delta_sum / self.memory_buffer.get_length())
+        self.avg_delta_plot = np.append(
+            self.avg_delta_plot, delta_sum / self.memory_buffer.get_length()
+        )
         self.memory_buffer.clear()
         self.ALPHA_BASELINE *= self.ALPHA_DECAY
         self.ALPHA_POLICY *= self.ALPHA_DECAY
 
     def save(self) -> None:
-        np.save(f"{self.weights_save}/baseline_weights_{self.id}.npy", self.baseline_weights)
-        np.save(f"{self.weights_save}/policy_weights_{self.id}.npy", self.policy_weights)
+        np.save(
+            f"{self.weights_save}/baseline_weights_{self.id}.npy", self.baseline_weights
+        )
+        np.save(
+            f"{self.weights_save}/policy_weights_{self.id}.npy", self.policy_weights
+        )
         np.save(f"{self.plots_save}/baseline_plot_{self.id}.npy", self.baseline_plot)
         np.save(f"{self.plots_save}/policy_plot_{self.id}.npy", self.policy_plot)
         np.save(f"{self.plots_save}/avg_delta_plot_{self.id}.npy", self.avg_delta_plot)

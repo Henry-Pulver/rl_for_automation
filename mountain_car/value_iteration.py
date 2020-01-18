@@ -1,15 +1,17 @@
 import numpy as np
-import gym
-import random
-from mountain_car_runner import CONSTS, DISC_CONSTS, test_solution
+from consts import (
+    CONSTS,
+    DISC_CONSTS,
+    NUM_POSITIONS,
+    NUM_VELOCITIES,
+)
+from mountain_car_runner import test_solution
 
-
-SAVE_LOCATION1 = "value_fn/value.npy"
-SAVE_LOCATION2 = "value_fn/v100_x200.npy"
-FINAL_SAVE_LOCATION = "value_fn/v140_x200.npy"
-SAVE_LOCATION4 = "value_fn/v200_x400.npy"
-# print("pspace", POSITION_SPACING)
-# print("vspace", VELOCITY_SPACING)
+save_folder = "value_fn"
+SAVE_LOCATION1 = f"{save_folder}/value.npy"
+SAVE_LOCATION2 = f"{save_folder}/v100_x200.npy"
+FINAL_SAVE_LOCATION = f"{save_folder}/v{NUM_VELOCITIES}_x{NUM_POSITIONS}.npy"
+SAVE_LOCATION4 = f"{save_folder}/v200_x400.npy"
 
 # class ValueIterator:
 #     def __init__(self, state_space: np.array, ):
@@ -41,6 +43,16 @@ def get_state_refs(states: np.array) -> np.array:
     )[1]
 
 
+def get_state_ref(state: np.array) -> np.array:
+    return np.where(
+        np.prod(
+            abs(DISC_CONSTS.STATE_SPACE - state)
+            <= np.array([DISC_CONSTS.POSITION_SPACING, DISC_CONSTS.VELOCITY_SPACING]),
+            axis=-1,
+        )
+    )
+
+
 def calculate_rewards(states: np.array) -> np.array:
     return np.prod(states >= [0.5, -CONSTS.MAX_SPEED], axis=-1) - 1
 
@@ -62,8 +74,8 @@ def get_new_state_refs(state: np.array, actions: np.array) -> np.array:
 def value_iteration() -> np.array:
     # Initialise variables
     theta = 0.5
-    value_fn = np.load(FINAL_SAVE_LOCATION)
-    # value_fn = np.zeros(STATE_SPACE.shape[0])
+    # value_fn = np.load(FINAL_SAVE_LOCATION)
+    value_fn = np.zeros(DISC_CONSTS.STATE_SPACE.shape[0])
     iteration_count = 0
 
     try:
@@ -71,7 +83,7 @@ def value_iteration() -> np.array:
             delta = 0
             for count, state in enumerate(DISC_CONSTS.STATE_SPACE):
                 v = value_fn[count]
-                outcome_state_refs = get_new_state_refs(state, CONSTS.ACTION_SPACE)
+                outcome_state_refs = get_new_state_refs(state, DISC_CONSTS.ACTION_SPACE)
                 rewards = (
                     calculate_rewards(DISC_CONSTS.STATE_SPACE[outcome_state_refs])
                     + value_fn[outcome_state_refs]
@@ -101,9 +113,11 @@ def value_iteration() -> np.array:
     return value_fn
 
 
-def pick_action(state, value_fn):
+def pick_action(state, value_fn, verbose: bool = False):
     outcome_state_refs = get_new_state_refs(state, DISC_CONSTS.ACTION_SPACE)
     outcome_state_values = value_fn[outcome_state_refs]
+    if verbose:
+        print(f"\nValue: {value_fn[get_state_ref(state)][0]}\t State: {state}")
     return [
         action
         for action, value in zip(DISC_CONSTS.ACTION_SPACE, outcome_state_values)
@@ -113,8 +127,22 @@ def pick_action(state, value_fn):
 
 def main():
     # value_fn = value_iteration()
+    # value_fn = np.load(SAVE_LOCATION2)
     value_fn = np.load(FINAL_SAVE_LOCATION)
-    test_solution(lambda state: pick_action(state, value_fn), record_video=False)
+    # print(np.min(value_fn))
+    num_trials = 20
+    rewards = []
+    for _ in range(num_trials):
+        rewards.append(
+            test_solution(
+                lambda state: pick_action(state, value_fn),
+                show_solution=False,
+                record_video=False,
+                episode_timeout=500,
+            )
+        )
+    print(f"rewards: {rewards}")
+    print(f"Mean reward: {np.mean(rewards)}")
 
 
 if __name__ == "__main__":
