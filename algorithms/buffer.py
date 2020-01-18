@@ -55,7 +55,7 @@ class ExperienceBuffer:
 
 
 class DemonstrationBuffer(ExperienceBuffer):
-    def __init__(self, save_path: Path, state_dimension: int, action_space_size: int):
+    def __init__(self, save_path: Path, state_dimension: Tuple[int], action_space_size: int):
         super(DemonstrationBuffer, self).__init__(state_dimension, action_space_size)
         self.save_path: Path = save_path
 
@@ -82,7 +82,7 @@ class DemonstrationBuffer(ExperienceBuffer):
 
 
 class PlayBuffer(DemonstrationBuffer):
-    def __init__(self, save_path: Path, state_dimension: int, action_space_size: int):
+    def __init__(self, save_path: Path, state_dimension: Tuple[int], action_space_size: int):
         super(PlayBuffer, self).__init__(save_path, state_dimension, action_space_size)
 
     def update_play(self, prev_obs, obs, action, rew, env_done, info,) -> None:

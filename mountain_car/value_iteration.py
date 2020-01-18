@@ -130,17 +130,20 @@ def main():
     # value_fn = np.load(SAVE_LOCATION2)
     value_fn = np.load(FINAL_SAVE_LOCATION)
     # print(np.min(value_fn))
-    num_trials = 20
+    num_trials = 100
+    step = 0
     rewards = []
-    for _ in range(num_trials):
-        rewards.append(
-            test_solution(
+    timeout = 500
+    while step < num_trials:
+        reward = test_solution(
                 lambda state: pick_action(state, value_fn),
                 show_solution=False,
                 record_video=False,
-                episode_timeout=500,
+                episode_timeout=timeout,
             )
-        )
+        if reward != -timeout:
+            rewards.append(reward)
+            step += 1
     print(f"rewards: {rewards}")
     print(f"Mean reward: {np.mean(rewards)}")
 
