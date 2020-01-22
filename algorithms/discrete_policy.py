@@ -44,3 +44,8 @@ class DiscretePolicy(nn.Module):
         action_prob = self.forward(x)
         action = action_prob.multinomial(1)
         return action
+
+
+def enable_gpus(model: nn.Module) -> nn.Module:
+
+    return model

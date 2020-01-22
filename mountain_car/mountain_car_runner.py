@@ -46,7 +46,8 @@ def test_solution(
             state, reward, done, info = env.step(action_chosen)
             total_reward += reward
             done = total_reward <= -episode_timeout if not done else done
-        print("final reward = ", total_reward)
+        if verbose:
+            print("final reward = ", total_reward)
     finally:
         if record_video:
             out.release()

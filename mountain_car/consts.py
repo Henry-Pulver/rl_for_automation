@@ -28,26 +28,3 @@ class DISC_CONSTS:
     STATE_SPACE = np.array(
         [np.array([pos, vel]) for vel in VELOCITY_VALUES for pos in POSITION_VALUES]
     )
-
-
-print(
-    np.mean(
-        [
-            (180,),
-            (96,),
-            (176,),
-            (153,),
-            (184,),
-            (156,),
-            (181,),
-            (155,),
-            (204,),
-            (118,),
-            (119,),
-            (158,),
-            (149,),
-            (173,),
-            (95,),
-        ]
-    )
-)

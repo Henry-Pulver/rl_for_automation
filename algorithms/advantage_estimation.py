@@ -16,12 +16,20 @@ def get_advantage(experience_buffer: ExperienceBuffer) -> np.array:
     pass
 
 
+def get_td_error(values: np.array, rewards: np.array, gamma: float):
+    assert len(values) == len(rewards)
+    values_copy = copy.deepcopy(values)
+    next_step_values = np.append(values_copy, 0)[1:]
+    td_errors = rewards + gamma * next_step_values - values
+    return td_errors
+
+
 def get_gae(
     experience_buffer: ExperienceBuffer,
     value_fn: Callable,
     gamma: float,
     lamda: float,
-    approximate: bool = False,
+    # approximate: bool = False,
 ) -> np.array:
     """
     Class for implementing Generalised Advantage Estimation (https://arxiv.org/pdf/1506.02438.pdf)
@@ -36,17 +44,23 @@ def get_gae(
     """
     assert 0 <= gamma <= 1
     assert 0 <= lamda <= 1
+    gamlam = gamma * lamda
     time_horizon = (
-        int(np.ceil(-3 / (np.log10(gamma * lamda))))
-        if approximate
-        else experience_buffer.get_length()
+        # int(np.ceil(-3 / (np.log10(gamlam))))
+        # if approximate
+        # else
+        experience_buffer.get_length()
     )
     states, actions, action_probs = experience_buffer.recall_memory()
-    rewards = experience_buffer.get_rewards()
-    values = value_fn(states)
+    rewards = experience_buffer.get_rewards()[:time_horizon]
+    values = value_fn(states)[:time_horizon]
+    td_error = get_td_error(values, rewards, gamma)
 
-    def td_error():
-        values_copy = copy.deepcopy(values)
-        next_step_values = np.append(values_copy, 0)[1:]
-        td_errors = rewards + gamma * next_step_values - values
-        return td_errors
+    gae = []
+    gamma_lamdas = np.logspace(start=0, stop=time_horizon-1, base=gamlam)
+    for step in range(time_horizon):
+        if step == 0:
+            gae.append(np.dot(gamma_lamdas, td_error))
+        else:
+            gae.append((gae[-1] - td_error[step-1]) / gamlam)
+    return gae

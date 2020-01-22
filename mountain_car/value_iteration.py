@@ -136,11 +136,11 @@ def main():
     timeout = 500
     while step < num_trials:
         reward = test_solution(
-                lambda state: pick_action(state, value_fn),
-                show_solution=False,
-                record_video=False,
-                episode_timeout=timeout,
-            )
+            lambda state: pick_action(state, value_fn),
+            show_solution=False,
+            record_video=False,
+            episode_timeout=timeout,
+        )
         if reward != -timeout:
             rewards.append(reward)
             step += 1

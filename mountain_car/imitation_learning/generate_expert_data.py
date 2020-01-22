@@ -43,7 +43,9 @@ def main():
     #     policy=policy, num_demos=num_demos, save_path=save_path, show_recording=False
     # )
 
-    demo_buffer = DemonstrationBuffer(save_path=save_path, state_dimension=(2,), action_space_size=3)
+    demo_buffer = DemonstrationBuffer(
+        save_path=save_path, state_dimension=(2,), action_space_size=3
+    )
     rewards = []
     for demo in range(num_demos):
         demo_buffer.load_demos(demo)

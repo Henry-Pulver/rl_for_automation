@@ -40,7 +40,7 @@ class ExperienceBuffer:
 
     def recall_memory(self) -> Tuple:
         """Returns stored memory."""
-        states = np.array(self.states).reshape((-1, self.state_dimension))
+        states = np.array(self.states).reshape((-1, *self.state_dimension))
         actions = np.array(self.actions)
         action_probs = (
             np.array(self.action_probs).reshape((-1, self.action_state_size))
@@ -55,7 +55,9 @@ class ExperienceBuffer:
 
 
 class DemonstrationBuffer(ExperienceBuffer):
-    def __init__(self, save_path: Path, state_dimension: Tuple[int], action_space_size: int):
+    def __init__(
+        self, save_path: Path, state_dimension: Tuple[int], action_space_size: int
+    ):
         super(DemonstrationBuffer, self).__init__(state_dimension, action_space_size)
         self.save_path: Path = save_path
 
@@ -82,7 +84,9 @@ class DemonstrationBuffer(ExperienceBuffer):
 
 
 class PlayBuffer(DemonstrationBuffer):
-    def __init__(self, save_path: Path, state_dimension: Tuple[int], action_space_size: int):
+    def __init__(
+        self, save_path: Path, state_dimension: Tuple[int], action_space_size: int
+    ):
         super(PlayBuffer, self).__init__(save_path, state_dimension, action_space_size)
 
     def update_play(self, prev_obs, obs, action, rew, env_done, info,) -> None:
