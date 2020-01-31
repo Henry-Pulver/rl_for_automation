@@ -4,10 +4,14 @@ import gym
 import torch
 from pathlib import Path
 from collections import namedtuple
+import logging
+import tqdm
+import math
 
-from typing import Optional, Tuple, Iterable
+from typing import Optional, Tuple
 from algorithms.buffer import ExperienceBuffer
 from algorithms.discrete_policy import DiscretePolicy
+from algorithms.utils import prod
 
 
 class DiscretePolicyBasedRL:
@@ -17,31 +21,40 @@ class DiscretePolicyBasedRL:
 
     def __init__(
         self,
-        state_dimension: int,
-        action_space: Iterable,
+        state_dimension: Tuple,
+        action_space: int,
         hyperparameters: namedtuple,
         ref_num: int,
         data_save_location: Path,
         nn_save_location: Path,
         actor_layers: Tuple,
+        actor_activation: str = "tanh",
+        param_plot_num: int = 10,
     ):
         self.hyp = hyperparameters
         self.id = ref_num
+        self.algorithm_name = "base"
+        self.state_dim_size = prod(state_dimension)
 
         self.actor = DiscretePolicy(
             state_dimension=state_dimension,
             action_space=action_space,
             hidden_layers=actor_layers,
-        )
+            activation=actor_activation,
+        ).float()
 
-        self.plots_save = f"{data_save_location}/plots/{self.id}"
+        self.overall_save = data_save_location
+        self.plots_save = f"{data_save_location}/plots/{self.algorithm_name}/{self.id}"
         os.makedirs(self.plots_save, exist_ok=True)
-        self.nn_save = f"{nn_save_location}/weights/{self.id}"
+        self.nn_save = f"{nn_save_location}/weights/{self.algorithm_name}/{self.id}"
         os.makedirs(self.nn_save, exist_ok=True)
 
-        self.memory_buffer = ExperienceBuffer()
-        self.policy_plot = self.policy_weights
-        self.baseline_plot = self.baseline_weights
+        self.memory_buffer = ExperienceBuffer(state_dimension, action_space)
+        self.policy_plot = self.actor.parameters()
+        tensor_str = "hidden_layers.0.weight"
+        chosen_params_x = np.random.randint(low=0, high=self.state_dim_size - 1, size=param_plot_num)
+        chosen_params_y = np.random.randint(low=0, high=actor_layers[0] - 1, size=param_plot_num)
+        print(self.actor.state_dict()[tensor_str].numpy()[chosen_params_x, chosen_params_y])
 
     def choose_action(self, state: np.array) -> torch.tensor:
         """For use with test_solution() function"""
@@ -80,73 +93,65 @@ class DiscretePolicyBasedRL:
         print(f"Episode of experience over, total reward = \t{total_reward}")
         return total_reward
 
-    def update_weights(
+    def update_step(
         self, returns: np.array, save_data: bool = False, step: Optional[int] = None
     ) -> None:
-        """"""
-        # print(f"Updating weights. Current policy value: {self.policy_weights}\n")
-        states, actions, action_probs = self.memory_buffer.recall_memory()
-        basic_features = convert_to_feature(states)
-
-        if self.ALPHA_BASELINE is not None:
-            values = np.matmul(self.baseline_weights, basic_features.T)
-            # print(f"Values: {values}\nValues shape: {values.shape}\n")
-            deltas = returns - values
-            # print(f"Deltas: {deltas}\n")
-            delta_baseline = self.ALPHA_BASELINE * np.matmul(deltas, basic_features)
-            # print(f"delta_baseline: {delta_baseline}\n")
-            self.baseline_weights += delta_baseline
-        next_states = get_next_states(states, self.action_space)
-        # print(f"Next states: {next_states}\n")
-        next_feature_vectors = convert_to_feature(next_states)
-        # print(f"Next feature vectors: {next_feature_vectors}\n")
-        steps = np.array(range(next_feature_vectors.shape[0]))
-        chosen_features = next_feature_vectors[steps, actions]
-        # print(f"Chosen features: {chosen_features}")
-        grad_ln_policy = chosen_features - np.sum(
-            action_probs.reshape((-1, DISC_CONSTS.ACTION_SPACE.shape[0], 1))
-            * next_feature_vectors,
-            axis=1,
-        )
-        # print(f"Grad ln policy: {grad_ln_policy}")
-
-        # Wait 20 steps for baseline to settle
-        if step > 20:
-            approx_value = deltas if self.ALPHA_BASELINE is not None else returns
-            self.policy_weights += self.ALPHA_POLICY * np.matmul(
-                approx_value, grad_ln_policy
-            )
-
-        # if save_data:
-        #     self.save_run_data(values, deltas, returns, step)
-
-        self.policy_plot = np.append(self.policy_plot, self.policy_weights)
-        if self.ALPHA_BASELINE is not None:
-            self.baseline_plot = np.append(self.baseline_plot, self.baseline_weights)
-            self.avg_delta_plot = np.append(self.avg_delta_plot, np.mean(deltas))
-            self.ALPHA_BASELINE *= self.ALPHA_DECAY
+        """Override with update step from relevant algorithm."""
         self.memory_buffer.clear()
-        self.ALPHA_POLICY *= self.ALPHA_DECAY
 
-    # def save_run_data(self, values, deltas, returns, step):
-    #     states, actions, action_probs = self.memory_buffer.recall_memory()
-    #     os.makedirs(f"REINFORCE_states/plots/{self.id}/{step}", exist_ok=True)
-    #     np.save(f"REINFORCE_states/plots/{self.id}/{step}/values.npy", values)
-    #     np.save(f"REINFORCE_states/plots/{self.id}/{step}/deltas.npy", deltas)
-    #     np.save(
-    #         f"REINFORCE_states/plots/{self.id}/{step}/states.npy", states,
-    #     )
-    #     np.save(
-    #         f"REINFORCE_states/plots/{self.id}/{step}/action_probs.npy", action_probs,
-    #     )
-    #     np.save(
-    #         f"REINFORCE_states/plots/{self.id}/{step}/actions.npy", actions,
-    #     )
-    #     np.save(
-    #         f"REINFORCE_states/plots/{self.id}/{step}/rewards.npy",
-    #         self.memory_buffer.get_rewards(),
-    #     )
-    #     np.save(f"REINFORCE_states/plots/{self.id}/{step}/returns.npy", returns)
+    def train_network(self, env_name: str, log_level=logging.INFO):
+        logging.basicConfig(
+            filename=f"{self.overall_save}/{self.id}.log", level=log_level
+        )
 
     def save_(self) -> None:
-        np.save(f"{save_path}/returns¬_{ref_num}.npy", rewards)
+        np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
+        np.save(f"{save_path}/moving_avg_{ref_num}.npy", moving_avg)
+        np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
+
+def train_policy(
+    env: gym.Env,
+    num_episodes: int,
+    max_episode_length: int,
+    discount_factor: float,
+    ref_num: Optional[int] = None,
+    random_seed: Optional[int] = None,
+):
+    torch.manual_seed(random_seed)
+    save_path = f"REINFORCE_states/plots/{ref_num}"
+
+    moving_avg = np.array([0])
+    rewards = np.array([0])
+
+
+
+    try:
+        for step in tqdm(range(num_steps)):
+            total_reward = policy.gather_experience(env, 10000)
+            returns = policy.calculate_returns()
+            policy.update_weights(returns, save_data=(step % 100 == 0), step=step)
+
+            rewards = np.append(rewards, total_reward)
+            moving_avg = np.append(
+                moving_avg, 0.01 * total_reward + 0.99 * moving_avg[-1]
+            )
+
+            if step % 10 == 0:
+                policy.save()
+                save_performance_plots()
+
+                # Output progress message
+                print(
+                    f"Trial {ref_num}, Step: {step}\tAvg: {moving_avg[-1]}\tAlpha_policy: {policy.ALPHA_POLICY}\tAlpha_baseline: {policy.ALPHA_BASELINE}"
+                )
+
+            if abs(moving_avg[-1]) < 150:
+                print(
+                    f"Problem successfully solved - policy saved at {policy.weights_save}!"
+                )
+                break
+
+    finally:
+        policy.save()
+        save_performance_plots()
+    return moving_avg[-1]

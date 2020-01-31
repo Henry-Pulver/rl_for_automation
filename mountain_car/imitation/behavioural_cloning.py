@@ -24,7 +24,7 @@ class BCTrainer:
     ):
         self.network = DiscretePolicy(
             state_dimension=state_dimension,
-            action_space=DISC_CONSTS.ACTION_SPACE,
+            action_space=DISC_CONSTS.ACTION_SPACE.shape[0],
             hidden_layers=(32, 32),
         ).float()
         # self.network = MountainCarNeuralNetwork.float()

@@ -7,8 +7,8 @@ from typing import Tuple
 class DiscretePolicy(nn.Module):
     def __init__(
         self,
-        state_dimension: int,
-        action_space: np.array,
+        state_dimension: Tuple,
+        action_space: int,
         hidden_layers: Tuple,
         activation: str = "tanh",
     ):
@@ -24,12 +24,12 @@ class DiscretePolicy(nn.Module):
             self.activation = torch.sigmoid
 
         self.hidden_layers = nn.ModuleList()
-        prev_dimension = state_dimension
+        prev_dimension = np.product(state_dimension)
         for layer_size in hidden_layers:
             self.hidden_layers.append(nn.Linear(prev_dimension, layer_size))
             prev_dimension = layer_size
 
-        self.action_head = nn.Linear(prev_dimension, action_space.shape[0])
+        self.action_head = nn.Linear(prev_dimension, action_space)
         self.action_head.weight.data.mul_(0.1)
         self.action_head.bias.data.mul_(0.0)
 
@@ -46,6 +46,5 @@ class DiscretePolicy(nn.Module):
         return action
 
 
-def enable_gpus(model: nn.Module) -> nn.Module:
-
-    return model
+# def enable_gpus(model: nn.Module) -> nn.Module:
+#     return model

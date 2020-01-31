@@ -12,7 +12,7 @@ from mountain_car.consts import (
 )
 from REINFORCE_actions import Policy
 from algorithms.discrete_policy import DiscretePolicy
-from imitation_learning.behavioural_cloning import action_probs
+from imitation.behavioural_cloning import action_probs
 
 
 def load_data(load_path: Path) -> np.array:

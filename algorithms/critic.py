@@ -5,7 +5,10 @@ from typing import Tuple
 
 class Critic(nn.Module):
     def __init__(
-        self, state_dimension: int, hidden_layers: Tuple[int], activation: str = "tanh"
+        self,
+        state_dimension: Tuple,
+        hidden_layers: Tuple[int],
+        activation: str = "tanh",
     ):
         super(Critic, self).__init__()
         activations = ["tanh", "relu", "sigmoid"]
