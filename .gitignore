@@ -1,9 +1,9 @@
 report_materials/
-*.log
-*.npy
+**/*.log
+**/*.npy
 **/demos_*
-*.pt
-*/concatenated/*
+**/concatenated/**
+**/expert_demos/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
