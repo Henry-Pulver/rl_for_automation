@@ -4,6 +4,7 @@ report_materials/
 **/demos_*
 **/concatenated/**
 **/expert_demos/**
+**/actions.npy
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
