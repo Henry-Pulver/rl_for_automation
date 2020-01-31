@@ -2,6 +2,7 @@ report_materials/
 *.log
 *.npy
 **/demos_*
+*.pt
 */concatenated/*
 
 # Byte-compiled / optimized / DLL files
