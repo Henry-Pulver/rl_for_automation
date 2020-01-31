@@ -11,6 +11,8 @@ from algorithms.discrete_policy import DiscretePolicy
 from algorithms.buffer import DemonstrationBuffer
 from algorithms.imitation_learning.behavioural_cloning import pick_action
 
+from atari.consts import GAME_STRINGS_TEST
+
 
 def run_solution(
     pick_action: Callable,
@@ -28,7 +30,7 @@ def run_solution(
     if record_video:
         fourcc = cv2.VideoWriter_fourcc(*"XVID")
         out = cv2.VideoWriter("output.avi", fourcc, video_fps, (600, 400))
-
+    env.seed(np.random.randint(low=0, high=2000))
     state = env.reset()
     done = False
     total_reward, reward, step, only_no_action = 0, 0, 0, True
@@ -94,3 +96,16 @@ def get_average_score(
     print(f"\nMean score: {mean_score}")
     # logging.info(f"\nMean score: {mean_score}")
     return mean_score
+
+network_load = "data/BC/28-01-2020/best_breakout_nn.pt"
+game_ref = 0
+env = gym.make(GAME_STRINGS_TEST[game_ref]).env
+hidden_layers = (256, 256, 256)
+get_average_score(
+                    network_load=network_load,
+                    env=env,
+                    episode_timeout=10000,
+                    show_solution=True,
+                    num_trials=100,
+                    hidden_layers=hidden_layers,
+                )
