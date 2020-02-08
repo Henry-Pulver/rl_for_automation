@@ -22,6 +22,7 @@ class BCTrainer:
         state_space_size: Tuple,
         action_space_size: int,
         hidden_layers: Tuple,
+        activation: str,
     ):
         self.state_space_size = state_space_size
         self.action_space_size = action_space_size
@@ -29,6 +30,7 @@ class BCTrainer:
             state_dimension=state_space_size,
             action_space=action_space_size,
             hidden_layers=hidden_layers,
+            activation=activation,
         ).float()
 
         self.demo_buffer = DemonstrationBuffer(
@@ -42,7 +44,7 @@ class BCTrainer:
         self.optimizer.zero_grad()
 
     def train_network(self, num_epochs: int, num_demos: int, minibatch_size: int):
-        prev_avg_loss = []
+        avg_loss_plot = []
         for epoch in range(num_epochs):
             sum_loss, num_steps = 0, 0
             demo_list = np.array(range(num_demos))
@@ -73,12 +75,12 @@ class BCTrainer:
             print(
                 f"Epoch number: {epoch + 1}\tAvg loss: {avg_loss}\t Num steps: {num_steps}"
             )
-            prev_avg_loss.append(avg_loss)
-            if len(prev_avg_loss) > 10:
+            avg_loss_plot.append(avg_loss)
+            if len(avg_loss_plot) > 10:
                 if (
-                    abs(avg_loss - prev_avg_loss[0]) < 1e-9
-                    and abs(avg_loss - prev_avg_loss[4]) < 1e-9
-                    and abs(avg_loss - prev_avg_loss[7]) < 1e-9
+                    abs(avg_loss - avg_loss_plot[0]) < 1e-9
+                    and abs(avg_loss - avg_loss_plot[-3]) < 1e-9
+                    and abs(avg_loss - avg_loss_plot[-1]) < 1e-9
                 ):
                     # logging.info(
                     #     f"\n\nAvg loss hasn't changed for 10 iterations.\n Skipping to next seed.\n"
@@ -87,7 +89,6 @@ class BCTrainer:
                         f"\n\nAvg loss hasn't changed for 10 iterations.\n Skipping to next seed.\n"
                     )
                     break
-                prev_avg_loss.pop(0)
 
 
 def train_network(
@@ -101,6 +102,7 @@ def train_network(
     state_space_size: Tuple,
     hidden_layers: Tuple,
     learning_rate: float,
+    activation: str,
 ):
     trainer = BCTrainer(
         demo_path=demo_path,
@@ -108,6 +110,7 @@ def train_network(
         action_space_size=action_space_size,
         state_space_size=state_space_size,
         hidden_layers=hidden_layers,
+        activation=activation,
     )
     trainer.train_network(
         num_epochs=num_epochs, num_demos=num_demos, minibatch_size=minibatch_size

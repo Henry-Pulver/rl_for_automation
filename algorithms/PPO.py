@@ -15,28 +15,28 @@ HyperparametersPPO = namedtuple(
     ("gamma", "lamda", "c1", "c2", "epsilon", "delta", "alpha", "K"),
 )
 """
-gamma: Discount factor for time delay in return.
-lamda: GAE weighting factor.
-c1: Value 
-delta: Max KL divergence limit.
-alpha: Backtracking coefficient for conjugate gradients method.
-max_backtracking_steps: Maximum number of steps that conjugate gradients can backtrack.
+    gamma: Discount factor for time delay in return.
+    lamda: GAE weighting factor.
+    c1: Value function
+    delta: Max KL divergence limit.
+    alpha: Backtracking coefficient for conjugate gradients method.
+    max_backtracking_steps: Maximum number of steps that conjugate gradients can backtrack.
 """
 
 
 class PPO(DiscretePolicyBasedRL):
     def __init__(
         self,
-        state_dimension: int,
-        action_space: Iterable,
+        state_dimension: Tuple,
+        action_space: int,
         hyperparameters: namedtuple,
         ref_num: int,
         data_save_location: Path,
         nn_save_location: Path,
         actor_layers: Tuple,
         critic_layers: Tuple,
-        actor_activation: str = "tanh",
-        critic_activation: str = "tanh",
+        actor_activation: str,
+        critic_activation: str,
     ):
         super(PPO, self).__init__(
             state_dimension,

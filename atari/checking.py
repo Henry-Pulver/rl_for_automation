@@ -15,7 +15,7 @@ from atari.consts import GAME_STRINGS_TEST
 
 
 def run_solution(
-    pick_action: Callable,
+    choose_action: Callable,
     env: gym.Env,
     record_video: bool = False,
     show_solution: bool = True,
@@ -33,18 +33,26 @@ def run_solution(
     env.seed(np.random.randint(low=0, high=2000))
     state = env.reset()
     done = False
-    total_reward, reward, step, only_no_action = 0, 0, 0, True
+    total_reward, reward, step = 0, 0, 0
     try:
+        prev_actions = []
         while not done:
             if show_solution or record_video:
                 rgb_array = env.render(render_type)
                 if record_video:
                     bgr_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
                     out.write(bgr_array)
-            action_chosen = pick_action(state)
-            only_no_action = action_chosen == 0 if only_no_action else only_no_action
-            if only_no_action and step > no_action_max:
-                action_chosen = 1
+            action_chosen = choose_action(state)
+            prev_actions.append(action_chosen)
+            if len(prev_actions) > no_action_max:
+
+                prev_actions.pop(0)
+                if (
+                    np.all(np.array(prev_actions) == 0)
+                    or np.all(np.array(prev_actions) == 2)
+                    or np.all(np.array(prev_actions) == 3)
+                ):
+                    action_chosen = 1
             if demo_buffer is not None:
                 demo_buffer.update(state, action_chosen, reward=reward)
             state, reward, done, info = env.step(action_chosen)
@@ -67,6 +75,7 @@ def get_average_score(
     num_trials: int,
     env: gym.Env,
     hidden_layers: Tuple,
+    activation: str,
     *args: Any,
 ) -> float:
     # Load in neural network from file
@@ -74,6 +83,7 @@ def get_average_score(
         action_space=env.action_space.n,
         state_dimension=env.observation_space.shape,
         hidden_layers=hidden_layers,
+        activation=activation,
     ).float()
     network.load_state_dict(torch.load(network_load))
     network.eval()
@@ -97,15 +107,17 @@ def get_average_score(
     # logging.info(f"\nMean score: {mean_score}")
     return mean_score
 
-network_load = "data/BC/28-01-2020/best_breakout_nn.pt"
-game_ref = 0
-env = gym.make(GAME_STRINGS_TEST[game_ref]).env
-hidden_layers = (256, 256, 256)
-get_average_score(
-                    network_load=network_load,
-                    env=env,
-                    episode_timeout=10000,
-                    show_solution=True,
-                    num_trials=100,
-                    hidden_layers=hidden_layers,
-                )
+
+# network_load = "data/BC/31-01-2020/128-128-128-128/demos_50_seed_3.pt"
+# game_ref = 0
+# env = gym.make(GAME_STRINGS_TEST[game_ref]).env
+# hidden_layers = (128, 128, 128, 128)
+# get_average_score(
+#     network_load=Path(network_load),
+#     env=env,
+#     episode_timeout=10000,
+#     show_solution=True,
+#     num_trials=100,
+#     hidden_layers=hidden_layers,
+#     activation="relu",
+#                 )

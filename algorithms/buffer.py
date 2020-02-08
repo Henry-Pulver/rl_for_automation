@@ -8,10 +8,16 @@ class ExperienceBuffer:
     Stores memory of past experience for model-free methods
     """
 
-    def __init__(self, state_dimension: Tuple[int], action_space_size: int):
+    def __init__(
+        self,
+        state_dimension: Tuple[int],
+        action_space_size: int,
+        max_memory_size: Optional[int] = None,
+    ):
         self.clear()
         self.state_dimension = state_dimension
         self.action_state_size = action_space_size
+        self.max_size = 10000 if max_memory_size is None else max_memory_size
 
     def update(
         self, state, action, action_probs=None, reward: Optional[float] = None
@@ -27,19 +33,30 @@ class ExperienceBuffer:
             None if action_probs is None else self.action_probs + action_probs
         )
 
-    def clear(self):
+    def limit_size(self) -> None:
+        """
+
+        """
+        while self.get_length() > self.max_size:
+            self.states.pop(0)
+            self.actions.pop(0)
+            if self.rewards:
+                self.rewards.pop(0)
+            if self.action_probs:
+                self.action_probs.pop(0)
+
+    def clear(self) -> None:
         """Empties buffer and sets to lists"""
         self.states = []
         self.actions = []
         self.rewards = []
         self.action_probs = []
 
-    def get_length(self):
+    def get_length(self) -> int:
         """Gives number of timesteps of episode of memory."""
         if type(self.states) == np.ndarray:
             return self.states.shape[0]
         else:
-            print(f"len: {len(self.states)}")
             return len(self.states)
 
     def recall_memory(self) -> Tuple:
@@ -53,63 +70,8 @@ class ExperienceBuffer:
         )
         return states, actions, action_probs
 
-    def get_rewards(self) -> np.array:
-        """Returns rewards from memory."""
-        return np.array(self.rewards)
-
-    def to_numpy(self):
-        self.states = (
-            np.array(self.states).reshape((-1, *self.state_dimension)).astype(np.uint8)
-        )
-        self.actions = np.array(self.actions).astype(np.uint8)
-        self.rewards = (
-            np.array(self.rewards).astype(np.uint8)
-            if self.rewards is not None
-            else None
-        )
-        self.action_probs = (
-            np.array(self.action_probs) if self.action_probs is not None else None
-        )
-
-    def from_numpy(self):
-        self.states = list(self.states)
-        self.actions = list(self.actions)
-        self.rewards = list(self.rewards) if self.rewards is not None else None
-        self.action_probs = (
-            list(self.action_probs) if self.action_probs is not None else None
-        )
-
-
-class DemonstrationBuffer(ExperienceBuffer):
-    def __init__(
-        self, save_path: Path, state_dimension: Tuple[int], action_space_size: int
-    ):
-        super(DemonstrationBuffer, self).__init__(state_dimension, action_space_size)
-        self.save_path: Path = save_path
-
-    def save_demos(self, demo_number: int):
-        """Saves data during expert demonstrations."""
-        demo_path = self.save_path / f"{demo_number}"
-        demo_path.mkdir(parents=True, exist_ok=True)
-        # Convert lists to numpy arrays
-        self.to_numpy()
-        np.save(f"{demo_path}/actions.npy", self.actions)
-        np.save(f"{demo_path}/states.npy", self.states)
-        if self.rewards is not None:
-            np.save(f"{demo_path}/rewards.npy", self.rewards)
-        # Back to lists for other purposes
-        self.from_numpy()
-
-    def load_demos(self, demo_number: int):
-        """Loads expert demonstrations data for training."""
-        self.actions += list(np.load(f"{self.save_path}/{demo_number}/actions.npy"))
-        self.states += list(np.load(f"{self.save_path}/{demo_number}/states.npy"))
-        try:
-            self.rewards += list(np.load(f"{self.save_path}/{demo_number}/rewards.npy"))
-        except Exception:
-            pass
-
-    def sample(self, batch_size: int) -> Tuple:
+    def random_sample(self, batch_size: int) -> Tuple:
+        """Sample batch_size states"""
         minibatch_size = np.min([batch_size, self.get_length()])
         sample_refs = np.random.randint(
             low=0, high=self.get_length(), size=minibatch_size
@@ -128,18 +90,97 @@ class DemonstrationBuffer(ExperienceBuffer):
         )
         return sampled_states, sampled_actions, sampled_rewards
 
+    def get_rewards(self) -> np.array:
+        """Returns rewards from memory."""
+        return np.array(self.rewards)
+
+    def to_numpy(self) -> None:
+        self.states = (
+            np.array(self.states).reshape((-1, *self.state_dimension)).astype(np.uint8)
+        )
+        self.actions = np.array(self.actions).astype(np.uint8)
+        self.rewards = (
+            np.array(self.rewards).astype(np.uint8)
+            if self.rewards is not None
+            else None
+        )
+        self.action_probs = (
+            np.array(self.action_probs) if self.action_probs is not None else None
+        )
+
+    def from_numpy(self) -> None:
+        self.states = list(self.states)
+        self.actions = list(self.actions)
+        self.rewards = list(self.rewards) if self.rewards is not None else None
+        self.action_probs = (
+            list(self.action_probs) if self.action_probs is not None else None
+        )
+
+
+class DemonstrationBuffer(ExperienceBuffer):
+    """
+    Class that samples, loads and saves demonstrations.
+    """
+
+    def __init__(
+        self,
+        save_path: Path,
+        state_dimension: Tuple[int],
+        action_space_size: int,
+        max_memory_size: Optional[int] = None,
+    ):
+        super(DemonstrationBuffer, self).__init__(
+            state_dimension, action_space_size, max_memory_size
+        )
+        self.save_path: Path = save_path
+
+    def save_demos(self, demo_number: int) -> None:
+        """Saves data during expert demonstrations."""
+        demo_path = self.save_path / f"{demo_number}"
+        demo_path.mkdir(parents=True, exist_ok=True)
+        # Convert lists to numpy arrays
+        self.to_numpy()
+        np.save(f"{demo_path}/actions.npy", self.actions)
+        np.save(f"{demo_path}/states.npy", self.states)
+        if self.rewards is not None:
+            np.save(f"{demo_path}/rewards.npy", self.rewards)
+        # Back to lists for other purposes
+        self.from_numpy()
+
+    def load_demos(self, demo_number: int) -> None:
+        """Loads expert demonstrations data for training."""
+        self.actions += list(np.load(f"{self.save_path}/{demo_number}/actions.npy"))
+        self.states += list(np.load(f"{self.save_path}/{demo_number}/states.npy"))
+        try:
+            self.rewards += list(np.load(f"{self.save_path}/{demo_number}/rewards.npy"))
+        except Exception:
+            pass
+
 
 class PlayBuffer(DemonstrationBuffer):
+    """
+    Class for recording demonstrations by human play.
+
+    Args:
+        save_path: Location to save demonstrations
+    """
+
     def __init__(
-        self, save_path: Path, state_dimension: Tuple[int], action_space_size: int
+        self,
+        save_path: Path,
+        state_dimension: Tuple[int],
+        action_space_size: int,
+        max_memory_size: Optional[int] = None,
     ):
-        super(PlayBuffer, self).__init__(save_path, state_dimension, action_space_size)
+        super(PlayBuffer, self).__init__(
+            save_path, state_dimension, action_space_size, max_memory_size
+        )
         # self.frame = 0
         # self.reward_count = 0
 
     def update_play(self, prev_obs, obs, action, rew, env_done, info,) -> None:
         """
-        Updates buffer with most recently observed states, actions,
+        Updates play buffer with most recently observed states, actions,
         probabilities and rewards
         """
         # if (self.frame % 4) == 0:
@@ -154,7 +195,30 @@ class PlayBuffer(DemonstrationBuffer):
         #         self.reward_count += rew
         # self.frame += 1
 
-    def clear(self):
-        super(PlayBuffer, self).clear()
-        # self.frame = 0
-        # self.reward_count = 0
+    # def clear(self):
+    #     super(PlayBuffer, self).clear()
+    # self.frame = 0
+    # self.reward_count = 0
+
+
+class PrioritisedBuffer(DemonstrationBuffer):
+    """
+    Demonstration buffer that allows prioritised sampling of transitions.
+    """
+
+    def __init__(
+        self,
+        save_path: Path,
+        state_dimension: Tuple[int],
+        action_space_size: int,
+        max_memory_size: Optional[int] = None,
+    ):
+        super(PrioritisedBuffer, self).__init__(
+            save_path, state_dimension, action_space_size, max_memory_size
+        )
+
+    def prioritised_sample(self, minibatch_size: int) -> Tuple:
+        minibatch_size = np.min([minibatch_size, self.get_length()])
+        sample_refs = np.random.randint(
+            low=0, high=self.get_length(), size=minibatch_size
+        )

@@ -10,7 +10,7 @@ class DiscretePolicy(nn.Module):
         state_dimension: Tuple,
         action_space: int,
         hidden_layers: Tuple,
-        activation: str = "tanh",
+        activation: str,
     ):
         super(DiscretePolicy, self).__init__()
         activations = ["tanh", "relu", "sigmoid"]

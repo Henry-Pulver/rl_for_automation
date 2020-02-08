@@ -20,10 +20,10 @@ def generate_expert_data(game_ref: int, fps: int, num_demos: int, demo_start: in
 
 
 def main():
-    game_ref = 0
+    game_ref = 2
     num_demos = 50
     fps = 60
-    demo_start = 10
+    demo_start = 1
     generate_expert_data(game_ref, fps, num_demos, demo_start)
 
 
