@@ -1,5 +1,6 @@
 from typing import Callable
 import numpy as np
+import torch
 from algorithms.buffer import ExperienceBuffer
 import copy
 
@@ -13,23 +14,26 @@ def get_advantage(experience_buffer: ExperienceBuffer, value_fn: Callable) -> np
     Returns:
         Advantage at every time
     """
-    pass
+    raise NotImplementedError
 
 
 def get_td_error(values: np.array, rewards: np.array, gamma: float):
+    if not values.shape == rewards.shape:
+        print(f"values.shape: {values.shape}")
+        print(f"values: {values}")
+        print(f"rewards.shape: {rewards.shape}")
     assert values.shape == rewards.shape
     values_copy = copy.deepcopy(values)
-    next_step_values = np.append(values_copy, 0)[1:]
+    next_step_values = np.append(values_copy, values[-1])[1:]
     td_errors = rewards + gamma * next_step_values - values.reshape((-1))
     return td_errors
 
 
 def get_gae(
     experience_buffer: ExperienceBuffer,
-    value_fn: Callable,
+    estimated_state_values,
     gamma: float,
     lamda: float,
-    approximate: bool = False,
 ) -> np.array:
     """
     Class for implementing Generalised Advantage Estimation (https://arxiv.org/pdf/1506.02438.pdf)
@@ -45,28 +49,12 @@ def get_gae(
     assert 0 <= gamma <= 1
     assert 0 <= lamda <= 1
     gamlam = gamma * lamda
-    time_horizon = (
-        int(np.ceil(-3 / (np.log10(gamlam))))
-        if approximate
-        else experience_buffer.get_length()
-    )
-    states, _, _ = experience_buffer.recall_memory()
-    rewards = experience_buffer.get_rewards()
-    values = value_fn(states)
-    td_error = get_td_error(values, rewards, gamma)
-
     gae = []
-    gamma_lamdas = np.logspace(
-        start=0, stop=np.log10(gamlam ** (time_horizon - 1)), num=time_horizon
-    )
-    for step in range(time_horizon):
-        if len(td_error[step:]) >= time_horizon:
-            gae.append(np.dot(gamma_lamdas, td_error[step : step + time_horizon]))
-        else:
-            gae.append(np.dot(gamma_lamdas[: len(td_error[step:])], td_error[step:]))
-        # if step == 0:
-        #     gae.append(np.dot(gamma_lamdas, td_error[:time_horizon]))
-        # else:
-        #     gae.append((gae[-1] - td_error[step - 1]) / gamlam)
-        # gae.append(((gae[-1] - td_error[step - 1]) / gamlam) + gamma_lamdas[-1] * td_error[step+time_horizon])
+    states, _, _, _ = experience_buffer.recall_memory()
+    rewards = experience_buffer.get_rewards()
+    td_errors = get_td_error(estimated_state_values, rewards, gamma)
+    future_gen_adv = 0
+    for td_error in reversed(td_errors):
+        future_gen_adv = td_error + (gamlam * future_gen_adv)
+        gae.insert(0, future_gen_adv)
     return np.array(gae)

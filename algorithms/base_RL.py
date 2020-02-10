@@ -6,12 +6,13 @@ from pathlib import Path
 from collections import namedtuple
 import logging
 import tqdm
-import datetime
 
 from typing import Optional, Tuple
 from algorithms.buffer import ExperienceBuffer
 from algorithms.discrete_policy import DiscretePolicy
 from algorithms.utils import prod
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class DiscretePolicyGradientsRL:
@@ -23,58 +24,62 @@ class DiscretePolicyGradientsRL:
         self,
         state_dimension: Tuple,
         action_space: int,
+        save_path: Path,
         hyperparameters: namedtuple,
-        ref_num: int,
         actor_layers: Tuple,
-        actor_activation: str = "tanh",
-        param_plot_num: int = 10,
+        actor_activation: str,
+        param_plot_num: int,
     ):
         self.hyp = hyperparameters
-        self.id = ref_num
-        self.algorithm_name = "base"
         self.state_dim_size = prod(state_dimension)
 
-        self.actor = DiscretePolicy(
-            state_dimension=state_dimension,
-            action_space=action_space,
-            hidden_layers=actor_layers,
-            activation=actor_activation,
-        ).float()
+        self.actor_layers = actor_layers
+        self.actor = (
+            DiscretePolicy(
+                state_dimension=state_dimension,
+                action_space=action_space,
+                hidden_layers=actor_layers,
+                activation=actor_activation,
+            )
+            .float()
+            .to(device)
+        )
 
         self.memory_buffer = ExperienceBuffer(state_dimension, action_space)
-        self.policy_plot = self.actor.parameters()
-        tensor_str = "hidden_layers.0.weight"
-        chosen_params_x = np.random.randint(
-            low=0, high=self.state_dim_size - 1, size=param_plot_num
-        )
-        chosen_params_y = np.random.randint(
+
+        # Randomly select 1st layer NN weights to plot during learning
+        self.chosen_params_x = np.random.randint(
             low=0, high=actor_layers[0] - 1, size=param_plot_num
         )
-        print(
-            self.actor.state_dict()[tensor_str].numpy()[
-                chosen_params_x, chosen_params_y
-            ]
+        self.chosen_params_y = np.random.randint(
+            low=0, high=self.state_dim_size - 1, size=param_plot_num
         )
+        self.save_path = save_path
+
+        self.policy_plot = [self.sample_nn_params()]
+        self.total_reward_plot = []
+        self.ep_length_plot = []
+
+    def sample_nn_params(self):
+        """Gets randomly sampled actor NN parameters from 1st layer."""
+        return self.actor.state_dict()["hidden_layers.0.weight"].numpy()[
+            self.chosen_params_x, self.chosen_params_y
+        ]
 
     def choose_action(self, state: np.array) -> torch.tensor:
         """For use with test_solution() function"""
         return self.actor.pick_action(state)
 
     def calculate_returns(self) -> np.array:
-        episode_len = self.memory_buffer.get_length()
-        try:
-            gammas = np.logspace(
-                0, np.log10(self.hyp.gamma ** (episode_len - 1)), num=episode_len
-            )
-        except AttributeError:
-            gammas = 1.0
+        """Calculates the returns from the experience_buffer."""
         future_rewards = self.memory_buffer.get_rewards()
         returns = []
-        for timestep in range(episode_len):
-            returns.append(np.sum(np.dot(future_rewards, gammas)))
-            # Remove last element from gammas array, remove 1st element from rewards
-            future_rewards = future_rewards[1:]
-            gammas = gammas[:-1]
+        future_discounted_return = 0
+        for reward in reversed(future_rewards):
+            future_discounted_return = reward + (
+                self.hyp.gamma * future_discounted_return
+            )
+            returns.insert(0, future_discounted_return)
         return np.array(returns)
 
     def gather_experience(self, env: gym.Env, time_limit: int) -> float:
@@ -93,79 +98,22 @@ class DiscretePolicyGradientsRL:
         print(f"Episode of experience over, total reward = \t{total_reward}")
         return total_reward
 
-    def update_step(
-        self, returns: np.array, save_data: bool = False, step: Optional[int] = None
-    ) -> None:
+    def save_episode(self, total_episode_reward: float, episode_length: int) -> None:
+        self.total_reward_plot.append(total_episode_reward)
+        self.ep_length_plot.append(episode_length)
+        np.save(f"{self.save_path}/returns.npy", np.array(self.total_reward_plot))
+        np.save(f"{self.save_path}/episode_lengths.npy", np.array(self.ep_length_plot))
+
+    def save_policy_params(self, save: bool):
+        self.policy_plot.append(self.sample_nn_params())
+        if save:
+            np.save(
+                f"{self.save_path}/policy_params.npy", np.array(self.policy_plot),
+            )
+
+    def save_network(self):
+        torch.save(self.actor.state_dict(), f"{self.save_path}/actor.pt")
+
+    def update_step(self) -> None:
         """Override with update step from relevant algorithm."""
-        self.memory_buffer.clear()
-
-    def train_network(self, env_name: str, num_epochs: int, data_save_location: Path, nn_save_location: Path, log_level=logging.INFO):
-        logging.basicConfig(
-            filename=f"{self.overall_save}/{self.id}.log", level=log_level
-        )
-        self.overall_save = data_save_location
-        date = datetime.date.today().strftime("%d-%m-%Y")
-        self.plots_save = f"{data_save_location}/plots/{self.algorithm_name}/"
-        os.makedirs(self.plots_save, exist_ok=True)
-        self.nn_save = f"{nn_save_location}/weights/{self.algorithm_name}/"
-        os.makedirs(self.nn_save, exist_ok=True)
-
-#     def save_(self) -> None:
-#         np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
-#         np.save(f"{save_path}/moving_avg_{ref_num}.npy", moving_avg)
-#         np.save(f"{save_path}/returns_{ref_num}.npy", rewards)
-#
-#
-# def train_policy(
-#     env: gym.Env,
-#     num_episodes: int,
-#     max_episode_length: int,
-#     discount_factor: float,
-#     ref_num: Optional[int] = None,
-#     random_seed: Optional[int] = None,
-# ):
-#     torch.manual_seed(random_seed)
-#     save_path = f"REINFORCE_states/plots/{ref_num}"
-#
-#     moving_avg = np.array([0])
-#     rewards = np.array([0])
-#
-#     try:
-#         for step in tqdm(range(num_steps)):
-#             total_reward = policy.gather_experience(env, 10000)
-#             returns = policy.calculate_returns()
-#             policy.update_weights(returns, save_data=(step % 100 == 0), step=step)
-#
-#             rewards = np.append(rewards, total_reward)
-#             moving_avg = np.append(
-#                 moving_avg, 0.01 * total_reward + 0.99 * moving_avg[-1]
-#             )
-#
-#             if step % 10 == 0:
-#                 policy.save()
-#                 save_performance_plots()
-#
-#                 # Output progress message
-#                 print(
-#                     f"Trial {ref_num}, Step: {step}\tAvg: {moving_avg[-1]}\tAlpha_policy: {policy.ALPHA_POLICY}\tAlpha_baseline: {policy.ALPHA_BASELINE}"
-#                 )
-#
-#             if abs(moving_avg[-1]) < 150:
-#                 print(
-#                     f"Problem successfully solved - policy saved at {policy.weights_save}!"
-#                 )
-#                 break
-#
-#     finally:
-#         policy.save()
-#         save_performance_plots()
-#     return moving_avg[-1]
-
-hyp = namedtuple("hyp", "a")
-
-DiscretePolicyGradientsRL(state_dimension=(2,),
-                          action_space=3,
-                          hyperparameters=hyp(a=2),
-                          actor_layers=(32, 32),
-
-                          )
+        raise NotImplementedError

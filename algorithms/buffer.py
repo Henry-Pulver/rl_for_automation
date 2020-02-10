@@ -28,14 +28,14 @@ class ExperienceBuffer:
         """
         self.states.append(state)
         self.actions.append(action)
-        self.rewards = None if reward is None else self.rewards + reward
+        self.rewards = None if reward is None else self.rewards + [reward]
         self.action_probs = (
-            None if action_probs is None else self.action_probs + action_probs
+            None if action_probs is None else self.action_probs + [action_probs]
         )
 
     def limit_size(self) -> None:
         """
-
+        Removes all the oldest data if buffer longer than max size
         """
         while self.get_length() > self.max_size:
             self.states.pop(0)
@@ -60,7 +60,7 @@ class ExperienceBuffer:
             return len(self.states)
 
     def recall_memory(self) -> Tuple:
-        """Returns stored memory."""
+        """Returns stored memory as numpy arrays."""
         states = np.array(self.states).reshape((-1, *self.state_dimension))
         actions = np.array(self.actions)
         action_probs = (
@@ -115,6 +115,40 @@ class ExperienceBuffer:
         self.action_probs = (
             list(self.action_probs) if self.action_probs is not None else None
         )
+
+
+class PPOExperienceBuffer(ExperienceBuffer):
+    def __init__(
+        self,
+        state_dimension: Tuple[int],
+        action_space_size: int,
+        max_memory_size: Optional[int] = None,
+    ):
+        super(PPOExperienceBuffer, self).__init__(
+            state_dimension, action_space_size, max_memory_size
+        )
+        self.log_probs = []
+
+    def update(
+        self,
+        state,
+        action,
+        action_probs=None,
+        reward: Optional[float] = None,
+        log_probs: Optional[Tuple] = None,
+    ) -> None:
+        super(PPOExperienceBuffer, self).update(state, action, action_probs, reward)
+        assert log_probs is not None
+        self.log_probs.append(log_probs)
+
+    def clear(self) -> None:
+        super(PPOExperienceBuffer, self).clear()
+        self.log_probs = []
+
+    def recall_memory(self) -> Tuple:
+        """Returns stored memory."""
+        states, actions, action_probs = super(PPOExperienceBuffer, self).recall_memory()
+        return states, actions, action_probs, np.array(self.log_probs)
 
 
 class DemonstrationBuffer(ExperienceBuffer):

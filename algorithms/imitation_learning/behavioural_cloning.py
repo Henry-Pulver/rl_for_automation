@@ -65,6 +65,7 @@ class BCTrainer:
                     actions = actions.type(torch.long)
 
                     loss = self.loss_fn(action_probs, actions)
+                    self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
                     num_steps += 1

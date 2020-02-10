@@ -26,7 +26,6 @@ def test_gae():
     gae = get_gae(
         experience_buffer=test_buffer, gamma=gamma, lamda=lamda, value_fn=value_fn
     )
-    print(gae)
     true_gae = [
         -0.81544699,
         -0.46163593,

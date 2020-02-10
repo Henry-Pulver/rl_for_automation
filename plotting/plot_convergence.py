@@ -2,13 +2,16 @@ import numpy as np
 import plotly.graph_objects as go
 import os
 from typing import List
+from pathlib import Path
+
+from algorithms.utils import generate_save_location
 from mountain_car.REINFORCE_next_states import (
     FEATURE_POLYNOMIAL_ORDER as state_poly_order,
 )
 from mountain_car.REINFORCE_actions import FEATURE_POLYNOMIAL_ORDER as action_poly_order
 
 
-def plot_concatenated_weights_and_performance(
+def plot_reinforce_concatenated_weights_and_performance(
     ref_num_list: List,
     opt: bool,
     feature_vector_size: int,
@@ -78,7 +81,7 @@ def plot_concatenated_weights_and_performance(
     )
 
 
-def plot_weights_and_performance(
+def plot_reinforce_weights_and_performance(
     ref_num: int,
     opt: bool,
     feature_vector_size: int,
@@ -153,15 +156,23 @@ def plot_run(ref_num: int, trial_num: int) -> None:
 
 
 def main():
-    plot_weights_and_performance(
-        ref_num=51,
-        opt=False,
-        feature_vector_size=(action_poly_order + 1) ** 2,
-        action_feature=False,
-        baseline=False,
+    load_path = generate_save_location(
+        Path("../mountain_car/data"),
+        algo="PPO",
+        env_name="MountainCar-v0",
+        nn_layers=(32, 32),
+        seed=0,
     )
 
-    # plot_concatenated_weights_and_performance(
+    # plot_reinforce_weights_and_performance(
+    #     ref_num=51,
+    #     opt=False,
+    #     feature_vector_size=(action_poly_order + 1) ** 2,
+    #     action_feature=False,
+    #     baseline=False,
+    # )
+
+    # plot_reinforce_concatenated_weights_and_performance(
     #     ref_num_list=[40, 41],
     #     opt=False,
     #     feature_vector_size=(action_poly_order + 1) ** 2,

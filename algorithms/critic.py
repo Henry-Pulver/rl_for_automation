@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from typing import Tuple
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class Critic(nn.Module):
@@ -22,7 +25,7 @@ class Critic(nn.Module):
             self.activation = torch.sigmoid
 
         self.hidden_layers = nn.ModuleList()
-        prev_dimension = state_dimension
+        prev_dimension = np.product(state_dimension)
         for layer_size in hidden_layers:
             self.hidden_layers.append(nn.Linear(prev_dimension, layer_size))
             prev_dimension = layer_size
@@ -30,9 +33,10 @@ class Critic(nn.Module):
         self.value_head = nn.Linear(prev_dimension, 1)
         self.value_head.bias.data.mul_(0.0)
 
-    def forward(self, x):
+    def forward(self, x: np.ndarray):
+        x = torch.from_numpy(x).float().to(device)
         for layer in self.hidden_layers:
             x = self.activation(layer(x))
 
-        value = self.value_head(x)
+        value = torch.flatten(self.value_head(x))
         return value

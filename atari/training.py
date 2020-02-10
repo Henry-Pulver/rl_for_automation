@@ -6,12 +6,23 @@ import logging
 import gym
 import datetime
 
-from algorithms.discrete_policy import DiscretePolicy
+from algorithms.PPO import PPO, HyperparametersPPO
 from algorithms.imitation_learning.behavioural_cloning import train_network
 from algorithms.buffer import DemonstrationBuffer
+from algorithms.utils import generate_save_location
 
 from atari.checking import get_average_score
 from atari.consts import GAME_NAMES, GAME_STRINGS_TEST
+
+
+def train_ppo():
+    game_ref = 0
+    env_str = GAME_STRINGS_TEST[game_ref]
+    random_seed = 0
+    actor_nn_layers = (128, 128, 128)
+    save_path = generate_save_location(
+        Path("data"), actor_nn_layers, "PPO", GAME_NAMES[game_ref], random_seed
+    )
 
 
 def demonstration_rewards():

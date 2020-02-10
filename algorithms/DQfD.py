@@ -4,7 +4,7 @@ import torch
 from typing import Tuple
 from collections import namedtuple
 
-from algorithms.buffer import DemonstrationBuffer
+from algorithms.buffer import DemonstrationBuffer, ExperienceBuffer
 
 
 HyperparametersDQfD = namedtuple(
@@ -39,7 +39,7 @@ class QLearningFromDemos:
         torch.manual_seed(random_seed)
 
         self.demo_buffer = DemonstrationBuffer(demo_path, state_dimension, action_space)
-        self.experience_buffer =
+        self.experience_buffer = ExperienceBuffer(state_dimension, action_space)
 
     def train(self, num_demos: int, num_epochs: int):
         # Load up the right number of demos
@@ -50,7 +50,6 @@ class QLearningFromDemos:
         for step in range(self.hyp.pre_training_updates):
             if step % self.hyp.network_update_frequency == 0:
                 pass
-
 
         # Phase 2
         for epoch in range(num_epochs):
