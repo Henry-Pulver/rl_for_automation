@@ -11,6 +11,21 @@ from mountain_car.REINFORCE_next_states import (
 from mountain_car.REINFORCE_actions import FEATURE_POLYNOMIAL_ORDER as action_poly_order
 
 
+def plot(load_path: Path, files: List, len_vector: List):
+    for count, file in enumerate(files):
+        fig = go.Figure()
+        y = np.load(f"{load_path}/{file}", allow_pickle=True).T
+        if not len_vector[count] == 1:
+            y = y.reshape((-1, len_vector[count])).T
+            x = np.linspace(0, y.shape[1], y.shape[1] + 1)
+            for theta in y:
+                fig.add_trace(go.Scatter(x=x, y=theta))
+        else:
+            x = np.linspace(0, y.shape[0], y.shape[0] + 1)
+            fig.add_trace(go.Scatter(x=x, y=y))
+        fig.write_html(f"{load_path}/{file}.html", auto_open=True,)
+
+
 def plot_reinforce_concatenated_weights_and_performance(
     ref_num_list: List,
     opt: bool,
@@ -161,8 +176,14 @@ def main():
         algo="PPO",
         env_name="MountainCar-v0",
         nn_layers=(32, 32),
-        seed=0,
-    )
+        seed=1,
+    ) / "3-epochs"
+    files = ["mean_clipped_loss.npy", "mean_entropy_loss.npy", "mean_value_loss.npy", "policy_params.npy", "critic_params.npy", "returns.npy"]
+    # files = ["episode_lengths.npy", "policy_params.npy"]
+    len_vector = [1, 1, 1, 2, 2, 1]
+    # len_vector = [1, 2]
+    plot(load_path, files, len_vector)
+
 
     # plot_reinforce_weights_and_performance(
     #     ref_num=51,

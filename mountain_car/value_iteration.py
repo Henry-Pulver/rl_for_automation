@@ -1,11 +1,11 @@
 import numpy as np
-from consts import (
+from mountain_car.consts import (
     CONSTS,
     DISC_CONSTS,
     NUM_POSITIONS,
     NUM_VELOCITIES,
 )
-from mountain_car_runner import test_solution
+from mountain_car.mountain_car_runner import test_solution
 
 save_folder = "value_fn"
 SAVE_LOCATION1 = f"{save_folder}/value.npy"

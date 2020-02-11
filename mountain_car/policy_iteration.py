@@ -1,7 +1,7 @@
 import numpy as np
 import gym
 import random
-from consts import CONSTS, DISC_CONSTS
+from mountain_car.consts import CONSTS, DISC_CONSTS
 
 VALUE_SAVE_LOCATION = "policy_iteration/value.npy"
 POLICY_SAVE_LOCATION = "policy_iteration/policy.npy"

@@ -8,9 +8,10 @@ from collections import namedtuple
 import logging
 
 from algorithms.buffer import PPOExperienceBuffer
-from algorithms.advantage_estimation import get_gae
+from algorithms.advantage_estimation import get_gae, get_td_error
 from algorithms.base_RL import DiscretePolicyGradientsRL
 from algorithms.critic import Critic
+from algorithms.discrete_policy import DiscretePolicy
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class PPO(DiscretePolicyGradientsRL):
         critic_layers: Tuple,
         actor_activation: str,
         critic_activation: str,
-        param_plot_num: int = 10,
+        param_plot_num: int = 2,
         param_sharing: bool = False,
     ):
         if param_sharing:
@@ -80,6 +81,15 @@ class PPO(DiscretePolicyGradientsRL):
             actor_activation,
             param_plot_num,
         )
+
+        self.actor_old = DiscretePolicy(
+                state_dimension=state_dimension,
+                action_space=action_space,
+                hidden_layers=actor_layers,
+                activation=actor_activation,
+            ).float()
+        self.actor_old.load_state_dict(self.actor.state_dict())
+
         self.save_path = self.save_path / f"{self.hyp.num_epochs}-epochs"
         self.save_path.mkdir(parents=True, exist_ok=True)
 
@@ -103,7 +113,16 @@ class PPO(DiscretePolicyGradientsRL):
             .float()
             .to(device)
         )
+
+        # Randomly select 1st layer NN weights to plot during learning
+        self.critic_params_x = np.random.randint(
+            low=0, high=critic_layers[0] - 1, size=param_plot_num
+        )
+        self.critic_params_y = np.random.randint(
+            low=0, high=self.state_dim_size - 1, size=param_plot_num
+        )
         self.critic_loss = torch.nn.MSELoss()
+        self.critic_plot = []
         self.loss_plots = {"entropy_loss": [], "clipped_loss": [], "value_loss": []}
 
     def train_episode(
@@ -142,16 +161,28 @@ class PPO(DiscretePolicyGradientsRL):
         ) = self.memory_buffer.recall_memory()
         actions_taken = torch.from_numpy(actions_taken).to(device)
         old_log_probs = torch.from_numpy(old_log_probs).to(device)
+        rewards = self.memory_buffer.get_rewards()
+        returns = []
+        discounted_reward = 0
+        for reward in reversed(rewards):
+            discounted_reward = reward + (self.hyp.gamma * discounted_reward)
+            returns.insert(0, discounted_reward)
+        returns = torch.tensor(returns).to(device)
+        returns = (returns - returns.mean()) / (returns.std() + 1e-5)
+
+        sum_entropy_loss, sum_clipped_loss, sum_value_loss = 0, 0, 0
 
         for epoch in range(self.hyp.num_epochs):
             logprobs, dist_entropy = self.actor.evaluate(numpy_states, actions_taken)
             policy_ratios = torch.exp(logprobs - old_log_probs)
             state_values = self.critic(numpy_states).to(device)
+
+            td_errors = get_td_error(state_values.detach().numpy(), rewards, self.hyp.gamma)
             gae = (
                 torch.from_numpy(
                     get_gae(
                         self.memory_buffer,
-                        state_values.detach().numpy(),
+                        td_errors,
                         gamma=self.hyp.gamma,
                         lamda=self.hyp.lamda,
                     )
@@ -159,8 +190,10 @@ class PPO(DiscretePolicyGradientsRL):
                 .float()
                 .to(device)
             )
+            # td_targets = td_errors + state_values.detach().numpy()
 
-            critic_loss = self.critic_loss(state_values, gae)
+            # critic_loss = self.critic_loss(state_values, torch.from_numpy(td_targets).float())
+            critic_loss = self.critic_loss(state_values, torch.from_numpy(np.array(returns)).float())
             self.critic_optimizer.zero_grad()
             critic_loss.mean().backward()
             self.critic_optimizer.step()
@@ -177,38 +210,41 @@ class PPO(DiscretePolicyGradientsRL):
             actor_loss.mean().backward()
             self.actor_optimizer.step()
 
-            save_plots = epoch == (self.hyp.num_epochs - 1)
-            self.plot_losses(
-                loss_clip, entropy_loss, critic_loss, save_plots,
-            )
-            self.save_policy_params(save_plots)
+            sum_clipped_loss += torch.squeeze(loss_clip.mean()).detach().numpy()
+            sum_entropy_loss += torch.squeeze(entropy_loss.mean()).detach().numpy()
+            sum_value_loss += critic_loss.detach().numpy()
+            if epoch == (self.hyp.num_epochs - 1):
+                self.plot_losses(
+                   sum_clipped_loss / self.hyp.num_epochs, sum_entropy_loss / self.hyp.num_epochs, sum_value_loss / self.hyp.num_epochs,
+                )
+                self.save_policy_params()
 
+        self.actor_old.load_state_dict(self.actor.state_dict())
         self.memory_buffer.clear()
 
     def save_network(self):
         super(PPO, self).save_network()
         torch.save(self.critic.state_dict(), f"{self.save_path}/critic.pt")
 
-    def plot_losses(self, clipped_loss, entropy_loss, value_loss, save: bool):
+    def plot_losses(self, clipped_loss, entropy_loss, value_loss):
         self.loss_plots["clipped_loss"].append(clipped_loss)
         self.loss_plots["entropy_loss"].append(entropy_loss)
         self.loss_plots["value_loss"].append(value_loss)
-        if save:
-            np.save(
-                f"{self.save_path}/mean_clipped_loss.npy",
-                np.array(self.loss_plots["clipped_loss"]),
-            )
-            np.save(
-                f"{self.save_path}/mean_entropy_loss.npy",
-                np.array(self.loss_plots["entropy_loss"]),
-            )
-            np.save(
-                f"{self.save_path}/mean_value_loss.npy",
-                np.array(self.loss_plots["value_loss"]),
-            )
+        np.save(
+            f"{self.save_path}/mean_clipped_loss.npy",
+            np.array(self.loss_plots["clipped_loss"]),
+        )
+        np.save(
+            f"{self.save_path}/mean_entropy_loss.npy",
+            np.array(self.loss_plots["entropy_loss"]),
+        )
+        np.save(
+            f"{self.save_path}/mean_value_loss.npy",
+            np.array(self.loss_plots["value_loss"]),
+        )
 
     def act_and_remember(self, state, reward):
-        action_probs = self.actor(state)
+        action_probs = self.actor_old(state)
         dist = Categorical(action_probs)
         action_chosen = dist.sample()
         self.memory_buffer.update(
@@ -218,6 +254,24 @@ class PPO(DiscretePolicyGradientsRL):
             log_probs=dist.log_prob(action_chosen).detach(),
         )
         return action_chosen.numpy()
+
+    def sample_nn_params(self) -> Tuple:
+        actor_params = super(PPO, self).sample_nn_params()
+        critic_params = self.critic.state_dict()["hidden_layers.0.weight"].numpy()[
+            self.critic_params_x, self.critic_params_y
+        ]
+        return actor_params, critic_params
+
+    def save_policy_params(self):
+        actor_params, critic_params = self.sample_nn_params()
+        self.policy_plot.append(actor_params)
+        self.critic_plot.append(critic_params)
+        np.save(
+            f"{self.save_path}/policy_params.npy", np.array(self.policy_plot),
+        )
+        np.save(
+            f"{self.save_path}/critic_params.npy", np.array(self.critic_plot),
+        )
 
     def gather_experience(self, env: gym.Env, time_limit: int) -> float:
         raise NotImplementedError

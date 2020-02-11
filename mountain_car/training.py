@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from pathlib import Path
 from typing import Tuple
+import time
 
 from algorithms.buffer import DemonstrationBuffer
 from algorithms.utils import generate_save_location
@@ -10,22 +11,22 @@ from algorithms.PPO import HyperparametersPPO, train_ppo_network
 
 def train_ppo():
     env_str = "MountainCar-v0"
-    random_seed = 0
+    random_seed = 1
     actor_nn_layers = (32, 32)
-    actor_activation = "relu"
-    critic_nn_layers = (16, 16)
-    critic_activation = "relu"
+    actor_activation = "tanh"
+    critic_nn_layers = (32, 32)
+    critic_activation = "tanh"
     max_episodes = 10000
     episode_length = 10000
     save_path = generate_save_location(
         Path("data"), actor_nn_layers, "PPO", env_str, random_seed
     )
     hyp = HyperparametersPPO(
-        gamma=0.99,
+        gamma=0.999,
         lamda=0.95,
-        actor_learning_rate=1e-3,
+        actor_learning_rate=2e-3,
         critic_learning_rate=1e-3,
-        T=512,
+        T=1024,
         epsilon=0.2,
         c2=0.01,
         num_epochs=3,
@@ -84,7 +85,9 @@ def train_deep_q_from_demonstrations(
 
 
 def main():
+    start_time = time.time()
     train_ppo()
+    print(f"time taken: {time.time() - start_time}")
 
 
 if __name__ == "__main__":

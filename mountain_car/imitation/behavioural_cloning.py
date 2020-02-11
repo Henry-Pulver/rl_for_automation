@@ -8,8 +8,8 @@ from algorithms.buffer import DemonstrationBuffer
 from typing import List, Tuple
 import logging
 
-from mountain_car_runner import test_solution
-from consts import DISC_CONSTS
+from mountain_car.mountain_car_runner import test_solution
+from mountain_car.consts import DISC_CONSTS
 
 
 class BCTrainer:

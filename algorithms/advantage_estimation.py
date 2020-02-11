@@ -31,7 +31,7 @@ def get_td_error(values: np.array, rewards: np.array, gamma: float):
 
 def get_gae(
     experience_buffer: ExperienceBuffer,
-    estimated_state_values,
+    td_errors,
     gamma: float,
     lamda: float,
 ) -> np.array:
@@ -51,8 +51,6 @@ def get_gae(
     gamlam = gamma * lamda
     gae = []
     states, _, _, _ = experience_buffer.recall_memory()
-    rewards = experience_buffer.get_rewards()
-    td_errors = get_td_error(estimated_state_values, rewards, gamma)
     future_gen_adv = 0
     for td_error in reversed(td_errors):
         future_gen_adv = td_error + (gamlam * future_gen_adv)

@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional, List
-from consts import DISC_CONSTS
+from mountain_car.consts import DISC_CONSTS
 from algorithms.buffer import ExperienceBuffer
 import optuna
 import math

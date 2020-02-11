@@ -2,6 +2,7 @@ report_materials/
 **/*.log
 **/*.npy
 **/*.pt
+**/*.html
 **/demos_*
 **/concatenated/**
 **/expert_demos/**

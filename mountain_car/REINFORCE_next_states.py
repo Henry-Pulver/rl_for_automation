@@ -3,7 +3,7 @@ import numpy as np
 import math
 from tqdm import tqdm
 import gym
-from consts import DISC_CONSTS, CONSTS
+from mountain_car.consts import DISC_CONSTS, CONSTS
 from algorithms.buffer import ExperienceBuffer
 from typing import Optional, List
 import optuna

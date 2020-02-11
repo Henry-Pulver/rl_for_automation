@@ -56,7 +56,7 @@ class DiscretePolicyGradientsRL:
         )
         self.save_path = save_path
 
-        self.policy_plot = [self.sample_nn_params()]
+        self.policy_plot = []
         self.total_reward_plot = []
         self.ep_length_plot = []
 
@@ -104,12 +104,11 @@ class DiscretePolicyGradientsRL:
         np.save(f"{self.save_path}/returns.npy", np.array(self.total_reward_plot))
         np.save(f"{self.save_path}/episode_lengths.npy", np.array(self.ep_length_plot))
 
-    def save_policy_params(self, save: bool):
+    def save_policy_params(self):
         self.policy_plot.append(self.sample_nn_params())
-        if save:
-            np.save(
-                f"{self.save_path}/policy_params.npy", np.array(self.policy_plot),
-            )
+        np.save(
+            f"{self.save_path}/policy_params.npy", np.array(self.policy_plot),
+        )
 
     def save_network(self):
         torch.save(self.actor.state_dict(), f"{self.save_path}/actor.pt")
