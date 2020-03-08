@@ -49,10 +49,10 @@ class DiscretePolicyGradientsRL:
 
         # Randomly select 1st layer NN weights to plot during learning
         self.chosen_params_x = np.random.randint(
-            low=0, high=actor_layers[0] - 1, size=param_plot_num
+            low=0, high=actor_layers[0], size=param_plot_num
         )
         self.chosen_params_y = np.random.randint(
-            low=0, high=self.state_dim_size - 1, size=param_plot_num
+            low=0, high=self.state_dim_size, size=param_plot_num
         )
         self.save_path = save_path
 
@@ -62,7 +62,7 @@ class DiscretePolicyGradientsRL:
 
     def sample_nn_params(self):
         """Gets randomly sampled actor NN parameters from 1st layer."""
-        return self.actor.state_dict()["hidden_layers.0.weight"].numpy()[
+        return self.actor.state_dict()["actor_layers.0.weight"].numpy()[
             self.chosen_params_x, self.chosen_params_y
         ]
 

@@ -4,6 +4,7 @@ report_materials/
 **/*.pt
 **/*.html
 **/demos_*
+**/data/**
 **/concatenated/**
 **/expert_demos/**
 

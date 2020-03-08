@@ -108,9 +108,10 @@ def get_average_score(
     return mean_score
 
 
-# network_load = "data/BC/31-01-2020/128-128-128-128/demos_50_seed_3.pt"
 # game_ref = 0
 # env = gym.make(GAME_STRINGS_TEST[game_ref]).env
+
+# network_load = "data/BC/31-01-2020/128-128-128-128/demos_50_seed_3.pt"
 # hidden_layers = (128, 128, 128, 128)
 # get_average_score(
 #     network_load=Path(network_load),
@@ -120,4 +121,15 @@ def get_average_score(
 #     num_trials=100,
 #     hidden_layers=hidden_layers,
 #     activation="relu",
+#                 )
+
+# network_load = "data/BC/28-01-2020/best_breakout_nn.pt"
+# hidden_layers = (256, 256, 256)
+# get_average_score(
+#                     network_load=network_load,
+#                     env=env,
+#                     episode_timeout=10000,
+#                     show_solution=True,
+#                     num_trials=100,
+#                     hidden_layers=hidden_layers,
 #                 )

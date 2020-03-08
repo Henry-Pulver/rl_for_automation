@@ -14,7 +14,10 @@ class ExperienceBuffer:
         action_space_size: int,
         max_memory_size: Optional[int] = None,
     ):
-        self.clear()
+        self.states = []
+        self.actions = []
+        self.rewards = []
+        self.action_probs = []
         self.state_dimension = state_dimension
         self.action_state_size = action_space_size
         self.max_size = 10000 if max_memory_size is None else max_memory_size
@@ -28,9 +31,10 @@ class ExperienceBuffer:
         """
         self.states.append(state)
         self.actions.append(action)
-        self.rewards = None if reward is None else self.rewards + [reward]
+        if reward is not None:
+            self.rewards.append(reward)
         self.action_probs = (
-            None if action_probs is None else self.action_probs + [action_probs]
+            [] if action_probs is None else self.action_probs + [action_probs]
         )
 
     def limit_size(self) -> None:
@@ -47,10 +51,10 @@ class ExperienceBuffer:
 
     def clear(self) -> None:
         """Empties buffer and sets to lists"""
-        self.states = []
-        self.actions = []
-        self.rewards = []
-        self.action_probs = []
+        del self.states[:]
+        del self.actions[:]
+        del self.rewards[:]
+        del self.action_probs[:]
 
     def get_length(self) -> int:
         """Gives number of timesteps of episode of memory."""
@@ -96,11 +100,11 @@ class ExperienceBuffer:
 
     def to_numpy(self) -> None:
         self.states = (
-            np.array(self.states).reshape((-1, *self.state_dimension)).astype(np.uint8)
+            np.array(self.states).reshape((-1, *self.state_dimension))
         )
         self.actions = np.array(self.actions).astype(np.uint8)
         self.rewards = (
-            np.array(self.rewards).astype(np.uint8)
+            np.array(self.rewards)
             if self.rewards is not None
             else None
         )
@@ -128,6 +132,7 @@ class PPOExperienceBuffer(ExperienceBuffer):
             state_dimension, action_space_size, max_memory_size
         )
         self.log_probs = []
+        self.is_terminal = []
 
     def update(
         self,
@@ -143,12 +148,19 @@ class PPOExperienceBuffer(ExperienceBuffer):
 
     def clear(self) -> None:
         super(PPOExperienceBuffer, self).clear()
-        self.log_probs = []
+        del self.log_probs[:]
+        del self.is_terminal[:]
 
     def recall_memory(self) -> Tuple:
         """Returns stored memory."""
         states, actions, action_probs = super(PPOExperienceBuffer, self).recall_memory()
-        return states, actions, action_probs, np.array(self.log_probs)
+        return (
+            states,
+            actions,
+            action_probs,
+            np.array(self.log_probs),
+            np.array(self.is_terminal),
+        )
 
 
 class DemonstrationBuffer(ExperienceBuffer):

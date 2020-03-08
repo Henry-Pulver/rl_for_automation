@@ -6,7 +6,7 @@ from typing import Tuple, Iterable
 from pathlib import Path
 from collections import namedtuple
 
-from algorithms.critic import Critic
+from old_code.critic import Critic
 
 HyperparametersTRPO = namedtuple("HyperparametersTRPO", ("delta", "alpha", "K"))
 """

@@ -1,8 +1,8 @@
-import numpy as np
 import torch
 from pathlib import Path
 from typing import Tuple
 import time
+import logging
 
 from algorithms.buffer import DemonstrationBuffer
 from algorithms.utils import generate_save_location
@@ -11,7 +11,7 @@ from algorithms.PPO import HyperparametersPPO, train_ppo_network
 
 def train_ppo():
     env_str = "MountainCar-v0"
-    random_seed = 1
+    random_seed = 0
     actor_nn_layers = (32, 32)
     actor_activation = "tanh"
     critic_nn_layers = (32, 32)
@@ -21,11 +21,12 @@ def train_ppo():
     save_path = generate_save_location(
         Path("data"), actor_nn_layers, "PPO", env_str, random_seed
     )
+
     hyp = HyperparametersPPO(
-        gamma=0.999,
+        gamma=0.99,
         lamda=0.95,
         actor_learning_rate=2e-3,
-        critic_learning_rate=1e-3,
+        critic_learning_rate=2e-3,
         T=1024,
         epsilon=0.2,
         c2=0.01,
@@ -43,6 +44,7 @@ def train_ppo():
         critic_activation=critic_activation,
         max_episodes=max_episodes,
         max_episode_length=episode_length,
+        log_level=logging.DEBUG,
     )
 
 
