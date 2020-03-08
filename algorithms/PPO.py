@@ -31,9 +31,13 @@ hyp_names = (
     "beta",
     "d_targ",
 )
-HyperparametersPPO = namedtuple(
-    "HyperparametersPPO", hyp_names, defaults=(None,) * len(hyp_names),
-)
+try:
+    HyperparametersPPO = namedtuple(
+        "HyperparametersPPO", hyp_names, defaults=(None,) * len(hyp_names),
+    )
+except TypeError:
+    HyperparametersPPO = namedtuple("HyperparametersPPO", hyp_names)
+    HyperparametersPPO.__new__.__defaults__ = (None,) * len(hyp_names)
 """
     gamma: Discount factor for time delay in return.
     T: Time horizon.

@@ -28,9 +28,15 @@ hyp_names = (
     "beta",
     "d_targ",
 )
-HyperparametersGAIL = namedtuple(
-    "HyperparametersGAIL", hyp_names, defaults=(None,) * len(hyp_names),
-)
+
+
+try:
+    HyperparametersGAIL = namedtuple(
+        "HyperparametersGAIL", hyp_names, defaults=(None,) * len(hyp_names),
+    )
+except TypeError:
+    HyperparametersGAIL = namedtuple("HyperparametersGAIL", hyp_names)
+    HyperparametersGAIL.__new__.__defaults__ = (None,) * len(hyp_names)
 """
     gamma: Discount factor for time delay in return.
     T: Time horizon.
