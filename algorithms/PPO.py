@@ -54,8 +54,8 @@ except TypeError:
 hyperparams_ppo_atari = HyperparametersPPO(
     gamma=0.99,
     lamda=0.95,
-    learning_rate=2e-4,
-    T=128,
+    learning_rate=2e-3,
+    T=1024,
     epsilon=0.2,
     c2=0.01,
     num_epochs=3,
@@ -94,7 +94,9 @@ class PPO:
         self.eps_clip = self.hyp.epsilon
         self.K_epochs = self.hyp.num_epochs
         self.entropy = entropy
+
         self.save_path = save_path
+        self.save_path.mkdir(parents=True, exist_ok=True)
 
         self.policy = ActorCritic(
             state_dimension,
@@ -121,8 +123,6 @@ class PPO:
         self.chosen_params_y = np.random.randint(
             low=0, high=state_dimension[0], size=param_plot_num
         )
-
-        os.makedirs(self.save_path, exist_ok=True)
         self.critic_params_x = np.random.randint(
             low=0, high=critic_layers[0], size=param_plot_num
         )
@@ -260,12 +260,12 @@ def train_ppo(
     critic_layers: Tuple,
     critic_activation: str,
     max_episodes: int,
-    max_timesteps: int,
     update_timestep: int,
     log_interval: int,
     hyp: HyperparametersPPO,
     solved_reward: float,
     random_seeds: List,
+    max_timesteps: Optional[int] = None,
     render: bool = False,
     verbose: bool = False,
     ppo_type: str = "clip",
@@ -322,8 +322,12 @@ def train_ppo(
         for ep_num in range(1, max_episodes + 1):
             state = env.reset()
             ep_total_reward = 0
-            for t in range(max_timesteps):
+            t = 0
+            keep_running = True if max_timesteps is None else t < max_timesteps
+            while keep_running:
                 timestep += 1
+                t += 1
+                keep_running = True if max_timesteps is None else t < max_timesteps
 
                 # Running policy_old:
                 action = ppo.policy_old.act(state, buffer)
@@ -377,18 +381,25 @@ def train_ppo(
 
 def main():
     # env_names = reversed(["MountainCar-v0", "CartPole-v1", "Acrobot-v1"])
-    env_names = ["Acrobot-v1"]
+    # env_names = ["Acrobot-v1"]
+    env_names = ["Breakout-ram-v4"]
     # solved_rewards = reversed([-135, 195, -80])  # stop training if avg_reward > solved_reward
     # solved_rewards = [195, -80]  # stop training if avg_reward > solved_reward
-    solved_rewards = [-80]  # stop training if avg_reward > solved_reward
-    log_interval = 20  # print avg reward in the interval
-    max_episodes = 10000  # max training episodes
-    max_timesteps = 10000  # max timesteps in one episode
+    # solved_rewards = [-80]  # stop training if avg_reward > solved_reward
+    solved_rewards = [300]  # stop training if avg_reward > solved_reward
+    log_interval = 1  # print avg reward in the interval
+    max_episodes = 1000000  # max training episodes
+    max_timesteps = None  # max timesteps in one episode
     update_timestep = 1024
     random_seeds = list(range(0, 5))
+    actor_layers = (128, 128, 128, 128)
+    actor_activation = "relu"
+    critic_layers = (128, 128, 128, 128)
+    critic_activation = "relu"
     # ppo_types = ["unclipped", "clip", "adaptive_KL", "fixed_KL"]
     # ppo_types = ["unclipped"]
-    ppo_types = ["fixed_KL"]
+    # ppo_types = ["fixed_KL"]
+    ppo_types = ["clip"]
 
     d_targs = [1]
     betas = [0.003]
@@ -428,16 +439,18 @@ def main():
                             solved_reward=solved_reward,
                             hyp=hyp,
                             random_seeds=random_seeds,
-                            actor_layers=(32, 32),
-                            actor_activation="tanh",
-                            critic_layers=(32, 32),
-                            critic_activation="tanh",
+                            actor_layers=actor_layers,
+                            actor_activation=actor_activation,
+                            critic_layers=critic_layers,
+                            critic_activation=critic_activation,
                             update_timestep=update_timestep,
                             log_interval=log_interval,
                             max_episodes=max_episodes,
                             max_timesteps=max_timesteps,
                             ppo_type=ppo_type,
                             verbose=False,
+                            date=date,
+                            render=False,
                         )
                     )
     finally:

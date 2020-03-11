@@ -99,15 +99,9 @@ class ExperienceBuffer:
         return np.array(self.rewards)
 
     def to_numpy(self) -> None:
-        self.states = (
-            np.array(self.states).reshape((-1, *self.state_dimension))
-        )
+        self.states = np.array(self.states).reshape((-1, *self.state_dimension))
         self.actions = np.array(self.actions).astype(np.uint8)
-        self.rewards = (
-            np.array(self.rewards)
-            if self.rewards is not None
-            else None
-        )
+        self.rewards = np.array(self.rewards) if self.rewards is not None else None
         self.action_probs = (
             np.array(self.action_probs) if self.action_probs is not None else None
         )

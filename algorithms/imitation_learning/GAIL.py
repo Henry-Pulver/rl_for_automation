@@ -73,7 +73,9 @@ def sample_from_buffers(
     expert_tuples = np.append(expert_states, expert_action_vectors, axis=1)
 
     data_set = np.append(expert_tuples, learner_tuples, axis=0)
-    labels = np.append(np.ones(num_expert_samples), np.zeros(batch_size - num_expert_samples))
+    labels = np.append(
+        np.ones(num_expert_samples), np.zeros(batch_size - num_expert_samples)
+    )
 
     return data_set, labels
 
@@ -168,26 +170,27 @@ class GAILTrainer(PPO):
     #     print(f"Avg loss: {sum_loss / num_steps}")
 
 
-def train_network(demo_path: Path,
-                  env_name: str,
-                  actor_layers: Tuple,
-                  actor_activation: str,
-                  critic_layers: Tuple,
-                  critic_activation: str,
-                  max_episodes: int,
-                  max_timesteps: int,
-                  update_timestep: int,
-                  log_interval: int,
-                  hyp: HyperparametersGAIL,
-                  solved_reward: float,
-                  random_seeds: List,
-                  render: bool = False,
-                  verbose: bool = False,
-                  ppo_type: str = "clip",
-                  advantage_type: str = "monte_carlo",
-                  log_level=logging.INFO,
-                  date: Optional[str] = None,
-                  ):
+def train_network(
+    demo_path: Path,
+    env_name: str,
+    actor_layers: Tuple,
+    actor_activation: str,
+    critic_layers: Tuple,
+    critic_activation: str,
+    max_episodes: int,
+    max_timesteps: int,
+    update_timestep: int,
+    log_interval: int,
+    hyp: HyperparametersGAIL,
+    solved_reward: float,
+    random_seeds: List,
+    render: bool = False,
+    verbose: bool = False,
+    ppo_type: str = "clip",
+    advantage_type: str = "monte_carlo",
+    log_level=logging.INFO,
+    date: Optional[str] = None,
+):
     env = gym.make(env_name).env
     state_dim = env.observation_space.shape
     action_dim = env.action_space.n
