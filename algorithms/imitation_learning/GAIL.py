@@ -86,8 +86,8 @@ class GAILTrainer(PPO):
         state_dimension: Tuple,
         action_space: int,
         save_path: Path,
-        hyperparameters: HyperparametersGAIL,
         demo_path: Path,
+        hyperparameters: HyperparametersGAIL,
         actor_layers: Tuple,
         critic_layers: Tuple,
         discriminator_layers: Tuple,
@@ -113,6 +113,9 @@ class GAILTrainer(PPO):
             ppo_type,
             advantage_type,
         )
+
+        self.demo_buffer = DemonstrationBuffer(demo_path, state_dimension, action_space)
+
         self.discrim_lr = self.hyp.discrim_lr
         # self.actor_critic = ActorCritic(
         #     state_dimension,
@@ -128,9 +131,20 @@ class GAILTrainer(PPO):
             discriminator_layers,
             discriminator_activation,
         ).to(device)
+
+
+
         self.discrim_optim = torch.optim.Adam(
             self.discriminator.parameters(), lr=self.lr
         )
+
+        self.discrim_params_x = np.random.randint(
+            low=0, high=critic_layers[0], size=param_plot_num
+        )
+        self.discrim_params_y = np.random.randint(
+            low=0, high=state_dimension[0], size=param_plot_num
+        )
+        self.discrim_plot = []
         self.loss_plots = {
             "discriminator_loss": [],
             "entropy_loss": [],
@@ -138,7 +152,32 @@ class GAILTrainer(PPO):
             "value_loss": [],
         }
 
-    # def train_network(self, num_epochs: int, num_demos: int):
+    def sample_nn_params(self):
+        actor_params, critic_params = super(GAILTrainer, self).sample_nn_params()
+        discrim_params = self.discriminator.state_dict()["discrim_layers.0.weight"].numpy()[
+            self.discrim_params_x, self.discrim_params_y
+        ]
+        return actor_params, critic_params, discrim_params
+
+    def save_policy_params(self):
+        actor_params, critic_params, discrim_params = self.sample_nn_params()
+        self.actor_plot.append(actor_params)
+        self.critic_plot.append(critic_params)
+        self.discrim_plot.append(discrim_params)
+        np.save(
+            f"{self.save_path}/policy_params.npy", np.array(self.actor_plot),
+        )
+        np.save(
+            f"{self.save_path}/critic_params.npy", np.array(self.critic_plot),
+        )
+        np.save(
+            f"{self.save_path}/discrim_params.npy", np.array(self.discrim_plot),
+        )
+
+    def update(self, buffer: ExperienceBuffer):
+
+
+
 
     # state_array = np.array([])
     # action_array = np.array([])
@@ -174,16 +213,18 @@ def train_network(
     demo_path: Path,
     env_name: str,
     actor_layers: Tuple,
-    actor_activation: str,
     critic_layers: Tuple,
+    discrim_layers: Tuple,
+    actor_activation: str,
     critic_activation: str,
+    discrim_activation: str,
     max_episodes: int,
-    max_timesteps: int,
     update_timestep: int,
     log_interval: int,
     hyp: HyperparametersGAIL,
     solved_reward: float,
     random_seeds: List,
+    max_timesteps: Optional[int] = None,
     render: bool = False,
     verbose: bool = False,
     ppo_type: str = "clip",
@@ -202,8 +243,6 @@ def train_network(
             env.seed(random_seed)
             print(f"Set random seed to: {random_seed}")
 
-        demo_buffer = DemonstrationBuffer(demo_path, state_dim, action_dim)
-
         buffer = ExperienceBuffer(state_dim, action_dim)
 
         hyp_str = generate_gail_str(ppo_type, hyp)
@@ -219,15 +258,18 @@ def train_network(
         save_path.mkdir(parents=True, exist_ok=True)
         logging.basicConfig(filename=f"{save_path}/log.log", level=log_level)
 
-        ppo = PPO(
-            state_dim,
-            action_dim,
-            actor_layers=actor_layers,
-            critic_layers=critic_layers,
-            actor_activation=actor_activation,
-            critic_activation=critic_activation,
+        gail_trainer = GAILTrainer(
+            state_dimension=state_dim,
+            action_space=action_dim,
             hyperparameters=hyp,
             save_path=save_path,
+            demo_path=demo_path,
+            actor_layers=actor_layers,
+            critic_layers=critic_layers,
+            discriminator_layers=discrim_layers,
+            actor_activation=actor_activation,
+            critic_activation=critic_activation,
+            discriminator_activation=discrim_activation,
             entropy=True,
             ppo_type=ppo_type,
             advantage_type=advantage_type,
@@ -295,38 +337,3 @@ def train_network(
     return episode_numbers
 
 
-# trainer = BCTrainer(demo_path=Path("../expert_demos/"),
-#                     learning_rate=1e-5,
-#                     )
-# trainer.train_network(num_epochs=50, num_demos=20)
-# save_location.mkdir(parents=True, exist_ok=True)
-# torch.save(trainer.network.state_dict(), f"{save_location}/{filename}.pt")
-
-
-# def show_solution(network_load: Path):
-# network = MountainCarNeuralNetwork().float()
-# network.load_state_dict(torch.load(network_load))
-# network.eval()
-#
-# for i in range(10):
-#     test_solution(lambda x: pick_action(state=x, network=network), record_video=False)
-
-
-# def pick_action(state, network):
-# state = torch.from_numpy(state)
-# action_probs = network(state.float())
-# action_probs = action_probs.detach().numpy()
-# chosen_action = np.array([np.random.choice(DISC_CONSTS.ACTION_SPACE, p=action_probs)])
-# return chosen_action
-
-
-if __name__ == "__main__":
-    t = np.zeros((5, 6))
-    t1 = np.zeros((5, 6))
-    a = np.array([3, 5, 1, 0, 2])
-    t1[np.arange(a.size), a] = 1
-
-    print(t1)
-    # a1 = np.append(t, a.reshape((len(a), 1)), axis=1)
-    # print(a1)
-    # print(t)

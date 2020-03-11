@@ -127,7 +127,7 @@ class PPO:
             low=0, high=critic_layers[0], size=param_plot_num
         )
         self.critic_params_y = np.random.randint(
-            low=0, high=state_dimension, size=param_plot_num
+            low=0, high=state_dimension[0], size=param_plot_num
         )
         self.actor_plot = []
         self.critic_plot = []
@@ -158,58 +158,63 @@ class PPO:
 
         # Optimize policy for K epochs:
         for k in range(self.K_epochs):
-            # Evaluating old actions and values :
-            logprobs, state_values, dist_entropy, action_probs = self.policy.evaluate(
-                old_states, old_actions
-            )
-
-            # Finding the ratio (pi_theta / pi_theta__old):
-            ratios = torch.exp(logprobs - old_logprobs)
-
-            # Finding Loss:
-            loss = 0
-            advantages = rewards - state_values.detach()
-            surr1 = ratios * advantages
-            if self.ppo_type == "clip":
-                surr2 = (
-                    torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip)
-                    * advantages
-                )
-                clipped_loss = -torch.min(surr1, surr2)
-                main_loss = clipped_loss
-            elif self.ppo_type == "fixed_KL":
-                d = F.kl_div(old_probs, action_probs)
-                main_loss = -surr1 + self.hyp.beta * d
-            elif self.ppo_type == "adaptive_KL":
-                d = F.kl_div(old_probs, action_probs)
-                if d < self.hyp.d_targ / 1.5:
-                    self.beta /= 2
-                elif d > self.hyp.d_targ * 1.5:
-                    self.beta *= 2
-                main_loss = -surr1 + self.beta * d
-            elif self.ppo_type == "unclipped":
-                main_loss = -surr1
-            loss += main_loss
-            value_loss = 0.5 * self.MseLoss(state_values, rewards)
-            loss += value_loss
-
-            if self.entropy:
-                loss -= 0.01 * dist_entropy.mean()
+            loss = self.calculate_loss(old_states, old_actions, old_logprobs, old_probs, rewards)
 
             # take gradient step
             self.optimizer.zero_grad()
             loss.mean().backward()
             self.optimizer.step()
 
-            self.plot_losses(
-                main_loss.mean().detach().numpy(),
-                -0.01 * dist_entropy.mean().detach().numpy(),
-                value_loss.detach().numpy(),
-            )
-
         self.save_policy_params()
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
+
+    def calculate_loss(self, old_states, old_actions, old_logprobs, old_probs, rewards):
+        # Evaluating old actions and values :
+        logprobs, state_values, dist_entropy, action_probs = self.policy.evaluate(
+            old_states, old_actions
+        )
+
+        # Finding the ratio (pi_theta / pi_theta__old):
+        ratios = torch.exp(logprobs - old_logprobs)
+
+        # Finding Loss:
+        loss = 0
+        advantages = rewards - state_values.detach()
+        surr1 = ratios * advantages
+        if self.ppo_type == "clip":
+            surr2 = (
+                    torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip)
+                    * advantages
+            )
+            clipped_loss = -torch.min(surr1, surr2)
+            main_loss = clipped_loss
+        elif self.ppo_type == "fixed_KL":
+            d = F.kl_div(old_probs, action_probs)
+            main_loss = -surr1 + self.hyp.beta * d
+        elif self.ppo_type == "adaptive_KL":
+            d = F.kl_div(old_probs, action_probs)
+            if d < self.hyp.d_targ / 1.5:
+                self.beta /= 2
+            elif d > self.hyp.d_targ * 1.5:
+                self.beta *= 2
+            main_loss = -surr1 + self.beta * d
+        elif self.ppo_type == "unclipped":
+            main_loss = -surr1
+        loss += main_loss
+        value_loss = 0.5 * self.MseLoss(state_values, rewards)
+        loss += value_loss
+
+        if self.entropy:
+            loss -= 0.01 * dist_entropy.mean()
+
+        self.plot_losses(
+            main_loss.mean().detach().numpy(),
+            -0.01 * dist_entropy.mean().detach().numpy(),
+            value_loss.detach().numpy(),
+        )
+
+        return loss
 
     def sample_nn_params(self):
         """Gets randomly sampled actor NN parameters from 1st layer."""
