@@ -11,11 +11,11 @@ from mountain_car.REINFORCE_next_states import (
 from mountain_car.REINFORCE_actions import FEATURE_POLYNOMIAL_ORDER as action_poly_order
 
 
-def plot(load_path: Path, files: List, len_vector: List):
-    for count, file in enumerate(files):
+def plot(load_path: Path, files: List, single_plots: List):
+    for single_plot, file in zip(single_plots, files):
         fig = go.Figure()
         y = np.load(f"{load_path}/{file}", allow_pickle=True).T
-        if not len_vector[count] == 1:
+        if not single_plot:
             x = np.linspace(0, y.shape[1], y.shape[1] + 1)
             for theta in y:
                 fig.add_trace(go.Scatter(x=x, y=theta))
@@ -23,7 +23,7 @@ def plot(load_path: Path, files: List, len_vector: List):
             x = np.linspace(0, y.shape[0], y.shape[0] + 1)
             fig.add_trace(go.Scatter(x=x, y=y))
         fig.write_html(
-            f"{load_path}/{file}.html", auto_open=True,
+            f"{load_path}/{file[:-4]}.html", auto_open=True,
         )
 
 
@@ -194,20 +194,28 @@ def main():
     # len_vector = [1, 1, 1, 2, 2, 1]
 
     #### PPO 2 ###
-    load_path = Path(
-        "../algorithms/data/PPO-fixed KL/Acrobot-v1/03-03-2020/32-32/seed-1"
-    )
-    files = [
-        "mean_clipped_loss.npy",
-        "mean_entropy_loss.npy",
-        "mean_value_loss.npy",
-        "policy_params.npy",
-        "critic_params.npy",
-    ]
-    len_vector = [1, 1, 1, 2, 2]
-    # len_vector = [1, 1, 2, 2]
+    # load_path = Path("../algorithms/data/PPO-clip/Acrobot-v1/12-03-2020/hyp-0.2/32-32/seed-0/")
 
-    plot(load_path, files, len_vector)
+    # files = [
+    #     "mean_clipped_loss.npy",
+    #     "mean_entropy_loss.npy",
+    #     "mean_value_loss.npy",
+    #     "policy_params.npy",
+    #     "critic_params.npy",
+    # ]
+    # single_plots = [True, True, True, False, False]
+
+    for seed in range(1):
+        load_path = Path(
+            f"../algorithms/data/PPO-fixed_KL/Acrobot-v1/"
+            f"12-03-2020/hyp-0.003/32-32/seed-{seed}/"
+        )
+        files = [
+            "policy_params.npy",
+        ]
+        single_plots = [False]
+
+        plot(load_path, files, single_plots)
 
     # plot_reinforce_weights_and_performance(
     #     ref_num=51,

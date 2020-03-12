@@ -76,7 +76,7 @@ class PPO:
         critic_layers: Tuple,
         actor_activation: str,
         critic_activation: str,
-        param_plot_num: int = 2,
+        param_plot_num: int,
         entropy: bool = True,
         ppo_type: str = "clip",
         advantage_type: str = "monte_carlo",
@@ -164,8 +164,7 @@ class PPO:
             self.optimizer.zero_grad()
             loss.mean().backward()
             self.optimizer.step()
-
-        self.save_policy_params()
+            self.record_policy_params()
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
@@ -208,7 +207,7 @@ class PPO:
         if self.entropy:
             loss -= 0.01 * dist_entropy.mean()
 
-        self.plot_losses(
+        self.record_losses(
             main_loss.mean().detach().numpy(),
             -0.01 * dist_entropy.mean().detach().numpy(),
             value_loss.detach().numpy(),
@@ -226,21 +225,24 @@ class PPO:
         ]
         return actor_params, critic_params
 
-    def save_policy_params(self):
+    def record_policy_params(self):
         actor_params, critic_params = self.sample_nn_params()
         self.actor_plot.append(actor_params)
         self.critic_plot.append(critic_params)
+
+    def record_losses(self, main_loss, entropy_loss, value_loss):
+        self.loss_plots["clipped_loss"].append(main_loss)
+        self.loss_plots["value_loss"].append(value_loss)
+        if self.entropy:
+            self.loss_plots["entropy_loss"].append(entropy_loss)
+
+    def save(self):
         np.save(
             f"{self.save_path}/policy_params.npy", np.array(self.actor_plot),
         )
         np.save(
             f"{self.save_path}/critic_params.npy", np.array(self.critic_plot),
         )
-
-    def plot_losses(self, main_loss, entropy_loss, value_loss):
-        self.loss_plots["clipped_loss"].append(main_loss)
-        self.loss_plots["value_loss"].append(value_loss)
-
         # LEGACY - main loss saved as "clipped loss" even tho not necessarily clipped
         np.save(
             f"{self.save_path}/mean_clipped_loss.npy",
@@ -251,11 +253,14 @@ class PPO:
             np.array(self.loss_plots["value_loss"]),
         )
         if self.entropy:
-            self.loss_plots["entropy_loss"].append(entropy_loss)
             np.save(
                 f"{self.save_path}/mean_entropy_loss.npy",
                 np.array(self.loss_plots["entropy_loss"]),
             )
+
+
+def plot_episode_reward(save_path: Path, running_rewards: List):
+    np.save(f"{save_path}/rewards.npy", np.array(running_rewards))
 
 
 def train_ppo(
@@ -277,6 +282,7 @@ def train_ppo(
     advantage_type: str = "monte_carlo",
     log_level=logging.INFO,
     date: Optional[str] = None,
+    param_plot_num: int = 2,
 ):
     env = gym.make(env_name).env
     state_dim = env.observation_space.shape
@@ -302,7 +308,7 @@ def train_ppo(
             date,
         )
         save_path.mkdir(parents=True, exist_ok=True)
-        logging.basicConfig(filename=f"{save_path}/log.log", level=log_level)
+        # logging.basicConfig(filename=f"{save_path}/log.log", level=log_level)
 
         ppo = PPO(
             state_dim,
@@ -316,10 +322,11 @@ def train_ppo(
             entropy=True,
             ppo_type=ppo_type,
             advantage_type=advantage_type,
+            param_plot_num=param_plot_num,
         )
 
         # logging variables
-        running_reward = 0
+        running_rewards = []
         avg_length = 0
         timestep = 0
 
@@ -348,7 +355,6 @@ def train_ppo(
                     buffer.clear()
                     timestep = 0
 
-                running_reward += reward
                 ep_total_reward += reward
                 if render:
                     env.render()
@@ -356,6 +362,7 @@ def train_ppo(
                     break
 
             avg_length += t
+            running_rewards.append(ep_total_reward)
 
             ep_str = ("{0:0" + f"{len(str(max_episodes))}" + "d}").format(ep_num)
             if verbose:
@@ -366,18 +373,18 @@ def train_ppo(
             # logging
             if ep_num % log_interval == 0:
                 avg_length = int(avg_length / log_interval)
-                running_reward = int((running_reward / log_interval))
+                running_reward = np.mean(running_rewards[-log_interval:])
                 print(
                     f"Episode {ep_str} of {max_episodes}. \t Avg length: {avg_length} \t Reward: {running_reward}"
                 )
+                plot_episode_reward(save_path, running_rewards)
+                ppo.save()
 
                 # stop training if avg_reward > solved_reward
                 if running_reward > solved_reward:
                     print("########## Solved! ##########")
                     torch.save(ppo.policy.state_dict(), f"./PPO_{env_name}.pth")
                     break
-
-                running_reward = 0
                 avg_length = 0
         episode_numbers.append(ep_num)
     print(f"episode_numbers: {episode_numbers}")
@@ -385,26 +392,35 @@ def train_ppo(
 
 
 def main():
+    # env_names = ["Breakout-ram-v4"]
+    # solved_rewards = [300]  # stop training if avg_reward > solved_reward
+
     # env_names = reversed(["MountainCar-v0", "CartPole-v1", "Acrobot-v1"])
-    # env_names = ["Acrobot-v1"]
-    env_names = ["Breakout-ram-v4"]
     # solved_rewards = reversed([-135, 195, -80])  # stop training if avg_reward > solved_reward
-    # solved_rewards = [195, -80]  # stop training if avg_reward > solved_reward
-    # solved_rewards = [-80]  # stop training if avg_reward > solved_reward
-    solved_rewards = [300]  # stop training if avg_reward > solved_reward
-    log_interval = 1  # print avg reward in the interval
-    max_episodes = 1000000  # max training episodes
-    max_timesteps = None  # max timesteps in one episode
+
+    env_names = ["Acrobot-v1"]
+    solved_rewards = [-80]  # stop training if avg_reward > solved_reward
+
+    log_interval = 20  # print avg reward in the interval
+    max_episodes = 10000  # max training episodes
+    max_timesteps = 10000  # max timesteps in one episode
     update_timestep = 1024
     random_seeds = list(range(0, 5))
-    actor_layers = (128, 128, 128, 128)
-    actor_activation = "relu"
-    critic_layers = (128, 128, 128, 128)
-    critic_activation = "relu"
+
+    actor_layers = (32, 32)
+    actor_activation = "tanh"
+    critic_layers = (32, 32)
+    critic_activation = "tanh"
+
+    # actor_layers = (128, 128, 128, 128)
+    # actor_activation = "relu"
+    # critic_layers = (128, 128, 128, 128)
+    # critic_activation = "relu"
+
     # ppo_types = ["unclipped", "clip", "adaptive_KL", "fixed_KL"]
     # ppo_types = ["unclipped"]
-    # ppo_types = ["fixed_KL"]
-    ppo_types = ["clip"]
+    ppo_types = ["fixed_KL"]
+    # ppo_types = ["unclipped"]
 
     d_targs = [1]
     betas = [0.003]
@@ -456,6 +472,7 @@ def main():
                             verbose=False,
                             date=date,
                             render=False,
+                            param_plot_num=10,
                         )
                     )
     finally:

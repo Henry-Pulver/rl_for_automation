@@ -132,8 +132,6 @@ class GAILTrainer(PPO):
             discriminator_activation,
         ).to(device)
 
-
-
         self.discrim_optim = torch.optim.Adam(
             self.discriminator.parameters(), lr=self.lr
         )
@@ -159,7 +157,7 @@ class GAILTrainer(PPO):
         ]
         return actor_params, critic_params, discrim_params
 
-    def save_policy_params(self):
+    def record_policy_params(self):
         actor_params, critic_params, discrim_params = self.sample_nn_params()
         self.actor_plot.append(actor_params)
         self.critic_plot.append(critic_params)
