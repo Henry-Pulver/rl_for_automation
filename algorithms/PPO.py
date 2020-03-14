@@ -1,4 +1,3 @@
-import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,7 +6,6 @@ from torch.distributions import Categorical
 from torch.functional import F
 import gym
 from collections import namedtuple
-import logging
 
 from typing import Tuple, List, Optional
 from pathlib import Path
@@ -275,12 +273,12 @@ def train_ppo(
     hyp: HyperparametersPPO,
     solved_reward: float,
     random_seeds: List,
+    load_path: Optional[str] = None,
     max_timesteps: Optional[int] = None,
     render: bool = False,
     verbose: bool = False,
     ppo_type: str = "clip",
     advantage_type: str = "monte_carlo",
-    log_level=logging.INFO,
     date: Optional[str] = None,
     param_plot_num: int = 2,
 ):
@@ -324,6 +322,9 @@ def train_ppo(
             advantage_type=advantage_type,
             param_plot_num=param_plot_num,
         )
+        if load_path is not None:
+            ppo.policy.load_state_dict(torch.load(load_path))
+            ppo.policy.eval()
 
         # logging variables
         running_rewards = []
@@ -383,53 +384,46 @@ def train_ppo(
                 # stop training if avg_reward > solved_reward
                 if running_reward > solved_reward:
                     print("########## Solved! ##########")
-                    torch.save(ppo.policy.state_dict(), f"./PPO_{env_name}.pth")
                     break
                 avg_length = 0
         episode_numbers.append(ep_num)
+        torch.save(ppo.policy.state_dict(), f"{save_path}/PPO_actor_critic.pth")
     print(f"episode_numbers: {episode_numbers}")
     return episode_numbers
 
 
 def main():
-    # env_names = ["Breakout-ram-v4"]
-    # solved_rewards = [300]  # stop training if avg_reward > solved_reward
+    #### ATARI ####
+    env_names = ["Breakout-ram-v4"]
+    solved_rewards = [300]  # stop training if avg_reward > solved_reward
+    actor_layers = (128, 128, 128, 128)
+    actor_activation = "relu"
+    critic_layers = (128, 128, 128, 128)
+    critic_activation = "relu"
 
-    # env_names = reversed(["MountainCar-v0", "CartPole-v1", "Acrobot-v1"])
-    # solved_rewards = reversed([-135, 195, -80])  # stop training if avg_reward > solved_reward
-
-    env_names = ["Acrobot-v1"]
-    solved_rewards = [-80]  # stop training if avg_reward > solved_reward
-
-    log_interval = 20  # print avg reward in the interval
-    max_episodes = 10000  # max training episodes
-    max_timesteps = 10000  # max timesteps in one episode
+    log_interval = 100  # print avg reward in the interval
+    max_episodes = 100000  # max training episodes
+    max_timesteps = None  # max timesteps in one episode
     update_timestep = 1024
     random_seeds = list(range(0, 5))
+    ppo_types = ["clip"]
+    d_targs = [0]
+    betas = [0]
 
-    actor_layers = (32, 32)
-    actor_activation = "tanh"
-    critic_layers = (32, 32)
-    critic_activation = "tanh"
-
-    # actor_layers = (128, 128, 128, 128)
-    # actor_activation = "relu"
-    # critic_layers = (128, 128, 128, 128)
-    # critic_activation = "relu"
-
-    # ppo_types = ["unclipped", "clip", "adaptive_KL", "fixed_KL"]
-    # ppo_types = ["unclipped"]
-    ppo_types = ["fixed_KL"]
-    # ppo_types = ["unclipped"]
-
-    d_targs = [1]
-    betas = [0.003]
-
-    # d_targs = [0.002, 0.01, 0.05, 0.25]
-    # betas = [0.2, 1, 5, 25]
-
-    # d_targs = [0.25]
-    # betas = [1]
+    #### OTHER STUFF ####
+    # env_names = ["Acrobot-v1", "CartPole-v1", "MountainCar-v0"]
+    # solved_rewards = [-80, 195, -135]  # stop training if avg_reward > solved_reward
+    # env_names = ["Acrobot-v1"]
+    # solved_rewards = [-80]  # stop training if avg_reward > solved_reward
+    # actor_layers = (32, 32)
+    # actor_activation = "tanh"
+    # critic_layers = (32, 32)
+    # critic_activation = "tanh"
+    # # ppo_types = ["unclipped", "clip", "adaptive_KL", "fixed_KL"]
+    # # ppo_types = ["unclipped"]
+    # ppo_types = ["fixed_KL"]
+    # d_targs = [1]
+    # betas = [0.003]
 
     date = datetime.date.today().strftime("%d-%m-%Y")
 

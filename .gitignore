@@ -37,6 +37,7 @@ wheels/
 *.egg
 MANIFEST
 .idea/
+ppo_training.py
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
