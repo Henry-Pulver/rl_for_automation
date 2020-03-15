@@ -53,6 +53,7 @@ class ActorCritic(DiscretePolicy):
     def act(self, state, buffer: PPOExperienceBuffer):
         state = torch.from_numpy(state).float().to(device)
         action_probs = self.forward(state)
+        print(action_probs)
         dist = Categorical(action_probs)
         action = dist.sample()
 

@@ -205,17 +205,32 @@ def main():
     # ]
     # single_plots = [True, True, True, False, False]
 
-    for seed in range(1):
-        load_path = Path(
-            f"../algorithms/data/PPO-fixed_KL/Acrobot-v1/"
-            f"12-03-2020/hyp-0.003/32-32/seed-{seed}/"
-        )
-        files = [
-            "policy_params.npy",
-        ]
-        single_plots = [False]
+    # for seed in range(1):
+    #     load_path = Path(
+    #         f"../algorithms/data/PPO-fixed_KL/Acrobot-v1/"
+    #         f"12-03-2020/hyp-0.003/32-32/seed-{seed}/"
+    #     )
+    #     files = [
+    #         "policy_params.npy",
+    #     ]
+    #     single_plots = [False]
+    #
+    #     plot(load_path, files, single_plots)
 
-        plot(load_path, files, single_plots)
+    load_path = Path(
+        f"../drive"
+    )
+    files = [
+        "mean_clipped_loss.npy",
+        "mean_entropy_loss.npy",
+        "mean_value_loss.npy",
+        "policy_params.npy",
+        "critic_params.npy",
+        "rewards.npy"
+    ]
+    single_plots = [True, True, True, False, False, True]
+
+    plot(load_path, files, single_plots)
 
     # plot_reinforce_weights_and_performance(
     #     ref_num=51,

@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import datetime
+
 from torch.distributions import Categorical
 from torch.functional import F
 import gym
@@ -10,6 +11,7 @@ from collections import namedtuple
 from typing import Tuple, List, Optional
 from pathlib import Path
 
+from algorithms.action_chooser import ActionChooser
 from algorithms.actor_critic import ActorCritic
 from algorithms.buffer import PPOExperienceBuffer
 from algorithms.utils import generate_save_location, generate_ppo_hyp_str
@@ -78,6 +80,7 @@ class PPO:
         entropy: bool = True,
         ppo_type: str = "clip",
         advantage_type: str = "monte_carlo",
+        policy_burn_in: int = 0,
     ):
         assert ppo_type in self.PPO_TYPES
         assert advantage_type in self.ADVANTAGE_TYPES
@@ -87,6 +90,7 @@ class PPO:
         if self.ppo_type[-2:] == "KL":
             self.beta = self.hyp.beta
 
+        self.policy_burn_in = policy_burn_in
         self.lr = self.hyp.learning_rate
         self.gamma = self.hyp.gamma
         self.eps_clip = self.hyp.epsilon
@@ -133,7 +137,7 @@ class PPO:
 
         self.MseLoss = nn.MSELoss()
 
-    def update(self, buffer: PPOExperienceBuffer):
+    def update(self, buffer: PPOExperienceBuffer, ep_num: int):
         # Monte Carlo estimate of state rewards:
         rewards = []
         discounted_reward = 0
@@ -156,7 +160,7 @@ class PPO:
 
         # Optimize policy for K epochs:
         for k in range(self.K_epochs):
-            loss = self.calculate_loss(old_states, old_actions, old_logprobs, old_probs, rewards)
+            loss = self.calculate_loss(old_states, old_actions, old_logprobs, old_probs, rewards, ep_num >= self.policy_burn_in)
 
             # take gradient step
             self.optimizer.zero_grad()
@@ -166,10 +170,10 @@ class PPO:
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
-    def calculate_loss(self, old_states, old_actions, old_logprobs, old_probs, rewards):
+    def calculate_loss(self, states, actions, old_logprobs, old_probs, rewards, update):
         # Evaluating old actions and values :
         logprobs, state_values, dist_entropy, action_probs = self.policy.evaluate(
-            old_states, old_actions
+            states, actions
         )
 
         # Finding the ratio (pi_theta / pi_theta__old):
@@ -198,12 +202,13 @@ class PPO:
             main_loss = -surr1 + self.beta * d
         elif self.ppo_type == "unclipped":
             main_loss = -surr1
-        loss += main_loss
-        value_loss = 0.5 * self.MseLoss(state_values, rewards)
+        if update:
+            loss += main_loss
+        value_loss = self.hyp.c1 * self.MseLoss(state_values, rewards)
         loss += value_loss
 
         if self.entropy:
-            loss -= 0.01 * dist_entropy.mean()
+            loss -= self.hyp.c2 * dist_entropy.mean()
 
         self.record_losses(
             main_loss.mean().detach().numpy(),
@@ -281,6 +286,8 @@ def train_ppo(
     advantage_type: str = "monte_carlo",
     date: Optional[str] = None,
     param_plot_num: int = 2,
+    policy_burn_in: int = 0,
+    chooser_params: Tuple = (None, None),
 ):
     env = gym.make(env_name).env
     state_dim = env.observation_space.shape
@@ -306,7 +313,6 @@ def train_ppo(
             date,
         )
         save_path.mkdir(parents=True, exist_ok=True)
-        # logging.basicConfig(filename=f"{save_path}/log.log", level=log_level)
 
         ppo = PPO(
             state_dim,
@@ -321,6 +327,7 @@ def train_ppo(
             ppo_type=ppo_type,
             advantage_type=advantage_type,
             param_plot_num=param_plot_num,
+            policy_burn_in=policy_burn_in,
         )
         if load_path is not None:
             ppo.policy.load_state_dict(torch.load(load_path))
@@ -330,12 +337,15 @@ def train_ppo(
         running_rewards = []
         avg_length = 0
         timestep = 0
+        action_chooser = ActionChooser(chooser_params[0], chooser_params[1])
 
         # training loop
         for ep_num in range(1, max_episodes + 1):
             state = env.reset()
             ep_total_reward = 0
             t = 0
+            action_list = []
+            action_chooser.reset()
             keep_running = True if max_timesteps is None else t < max_timesteps
             while keep_running:
                 timestep += 1
@@ -344,6 +354,8 @@ def train_ppo(
 
                 # Running policy_old:
                 action = ppo.policy_old.act(state, buffer)
+                action = action_chooser.step(action)
+                action_list.append(action)
                 state, reward, done, _ = env.step(action)
 
                 # Saving reward and is_terminal:
@@ -352,7 +364,7 @@ def train_ppo(
 
                 # update if its time
                 if timestep % update_timestep == 0:
-                    ppo.update(buffer)
+                    ppo.update(buffer, ep_num)
                     buffer.clear()
                     timestep = 0
 
@@ -370,6 +382,7 @@ def train_ppo(
                 print(
                     f"Episode {ep_str} of {max_episodes}. \t Total reward = {ep_total_reward}"
                 )
+                print(f"action list: {action_list}")
 
             # logging
             if ep_num % log_interval == 0:
@@ -396,16 +409,17 @@ def main():
     #### ATARI ####
     env_names = ["Breakout-ram-v4"]
     solved_rewards = [300]  # stop training if avg_reward > solved_reward
-    actor_layers = (128, 128, 128, 128)
+    actor_layers = (64, 64)
     actor_activation = "relu"
-    critic_layers = (128, 128, 128, 128)
+    critic_layers = (64, 64)
     critic_activation = "relu"
 
-    log_interval = 100  # print avg reward in the interval
+    log_interval = 20  # print avg reward in the interval
     max_episodes = 100000  # max training episodes
     max_timesteps = None  # max timesteps in one episode
     update_timestep = 1024
-    random_seeds = list(range(0, 5))
+    # random_seeds = list(range(0, 5))
+    random_seeds = [55]
     ppo_types = ["clip"]
     d_targs = [0]
     betas = [0]
@@ -439,9 +453,10 @@ def main():
                     hyp = HyperparametersPPO(
                         gamma=0.99,  # discount factor
                         lamda=0.95,
-                        learning_rate=2e-3,
+                        learning_rate=2e-5,
                         T=1024,  # update policy every n timesteps
                         epsilon=0.2,  # clip parameter for PPO
+                        c1=0.5,
                         c2=0.01,
                         num_epochs=3,  # update policy for K epochs
                         d_targ=d_targ,
@@ -463,10 +478,12 @@ def main():
                             max_episodes=max_episodes,
                             max_timesteps=max_timesteps,
                             ppo_type=ppo_type,
-                            verbose=False,
+                            verbose=True,
                             date=date,
-                            render=False,
+                            render=True,
                             param_plot_num=10,
+                            policy_burn_in=5,
+                            chooser_params=(100, 1),
                         )
                     )
     finally:
