@@ -217,16 +217,14 @@ def main():
     #
     #     plot(load_path, files, single_plots)
 
-    load_path = Path(
-        f"../drive"
-    )
+    load_path = Path(f"../drive")
     files = [
         "mean_clipped_loss.npy",
         "mean_entropy_loss.npy",
         "mean_value_loss.npy",
         "policy_params.npy",
         "critic_params.npy",
-        "rewards.npy"
+        "rewards.npy",
     ]
     single_plots = [True, True, True, False, False, True]
 

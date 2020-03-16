@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import datetime
 
-from torch.distributions import Categorical
 from torch.functional import F
 import gym
 from collections import namedtuple
@@ -81,6 +80,7 @@ class PPO:
         ppo_type: str = "clip",
         advantage_type: str = "monte_carlo",
         policy_burn_in: int = 0,
+        param_sharing: bool = False,
     ):
         assert ppo_type in self.PPO_TYPES
         assert advantage_type in self.ADVANTAGE_TYPES
@@ -89,6 +89,7 @@ class PPO:
         self.hyp = hyperparameters
         if self.ppo_type[-2:] == "KL":
             self.beta = self.hyp.beta
+        self.param_sharing = param_sharing
 
         self.policy_burn_in = policy_burn_in
         self.lr = self.hyp.learning_rate
@@ -107,6 +108,7 @@ class PPO:
             actor_activation,
             critic_layers,
             critic_activation,
+            param_sharing,
         ).to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.lr,)
         self.policy_old = ActorCritic(
@@ -116,21 +118,14 @@ class PPO:
             actor_activation,
             critic_layers,
             critic_activation,
+            param_sharing,
         ).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
-        self.chosen_params_x = np.random.randint(
-            low=0, high=actor_layers[0], size=param_plot_num
+        self.determine_plotted_params(
+            param_plot_num, actor_layers, critic_layers, state_dimension
         )
-        self.chosen_params_y = np.random.randint(
-            low=0, high=state_dimension[0], size=param_plot_num
-        )
-        self.critic_params_x = np.random.randint(
-            low=0, high=critic_layers[0], size=param_plot_num
-        )
-        self.critic_params_y = np.random.randint(
-            low=0, high=state_dimension[0], size=param_plot_num
-        )
+        self.shared_plot = []
         self.actor_plot = []
         self.critic_plot = []
         self.loss_plots = {"entropy_loss": [], "clipped_loss": [], "value_loss": []}
@@ -160,7 +155,14 @@ class PPO:
 
         # Optimize policy for K epochs:
         for k in range(self.K_epochs):
-            loss = self.calculate_loss(old_states, old_actions, old_logprobs, old_probs, rewards, ep_num >= self.policy_burn_in)
+            loss = self.calculate_loss(
+                old_states,
+                old_actions,
+                old_logprobs,
+                old_probs,
+                rewards,
+                ep_num >= self.policy_burn_in,
+            )
 
             # take gradient step
             self.optimizer.zero_grad()
@@ -185,8 +187,7 @@ class PPO:
         surr1 = ratios * advantages
         if self.ppo_type == "clip":
             surr2 = (
-                    torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip)
-                    * advantages
+                torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
             )
             clipped_loss = -torch.min(surr1, surr2)
             main_loss = clipped_loss
@@ -220,18 +221,25 @@ class PPO:
 
     def sample_nn_params(self):
         """Gets randomly sampled actor NN parameters from 1st layer."""
+        shared_params = None
         actor_params = self.policy.state_dict()["actor_layers.0.weight"].numpy()[
-            self.chosen_params_x, self.chosen_params_y
+            self.actor_params_x, self.actor_params_y
         ]
         critic_params = self.policy.state_dict()["critic_layers.0.weight"].numpy()[
             self.critic_params_x, self.critic_params_y
         ]
-        return actor_params, critic_params
+        if self.param_sharing:
+            shared_params = self.policy.state_dict()["shared_layers.0.weight"].numpy()[
+                self.shared_params_x, self.shared_params_y
+            ]
+        return actor_params, critic_params, shared_params
 
     def record_policy_params(self):
-        actor_params, critic_params = self.sample_nn_params()
+        actor_params, critic_params, shared_params = self.sample_nn_params()
         self.actor_plot.append(actor_params)
         self.critic_plot.append(critic_params)
+        if self.param_sharing:
+            self.shared_plot.append(shared_params)
 
     def record_losses(self, main_loss, entropy_loss, value_loss):
         self.loss_plots["clipped_loss"].append(main_loss)
@@ -246,6 +254,10 @@ class PPO:
         np.save(
             f"{self.save_path}/critic_params.npy", np.array(self.critic_plot),
         )
+        if self.param_sharing:
+            np.save(
+                f"{self.save_path}/shared_params.npy", np.array(self.shared_plot),
+            )
         # LEGACY - main loss saved as "clipped loss" even tho not necessarily clipped
         np.save(
             f"{self.save_path}/mean_clipped_loss.npy",
@@ -260,6 +272,42 @@ class PPO:
                 f"{self.save_path}/mean_entropy_loss.npy",
                 np.array(self.loss_plots["entropy_loss"]),
             )
+
+    def determine_plotted_params(
+        self,
+        param_plot_num: int,
+        actor_layers: Tuple,
+        critic_layers,
+        state_dimension: Tuple,
+    ):
+        if self.param_sharing:
+            self.shared_params_x = np.random.randint(
+                low=0, high=actor_layers[0], size=param_plot_num
+            )
+            self.shared_params_y = np.random.randint(
+                low=0, high=state_dimension[0], size=param_plot_num
+            )
+            actor_x_max = actor_layers[-1]
+            actor_y_max = actor_layers[-2]
+            critic_x_max = critic_layers[-1]
+            critic_y_max = critic_layers[-2]
+        else:
+            actor_x_max = actor_layers[0]
+            actor_y_max = state_dimension[0]
+            critic_x_max = critic_layers[0]
+            critic_y_max = state_dimension[0]
+        self.actor_params_x = np.random.randint(
+            low=0, high=actor_x_max, size=param_plot_num
+        )
+        self.actor_params_y = np.random.randint(
+            low=0, high=actor_y_max, size=param_plot_num
+        )
+        self.critic_params_x = np.random.randint(
+            low=0, high=critic_x_max, size=param_plot_num
+        )
+        self.critic_params_y = np.random.randint(
+            low=0, high=critic_y_max, size=param_plot_num
+        )
 
 
 def plot_episode_reward(save_path: Path, running_rewards: List):
@@ -288,6 +336,7 @@ def train_ppo(
     param_plot_num: int = 2,
     policy_burn_in: int = 0,
     chooser_params: Tuple = (None, None),
+    param_sharing: bool = False,
 ):
     env = gym.make(env_name).env
     state_dim = env.observation_space.shape
@@ -328,6 +377,7 @@ def train_ppo(
             advantage_type=advantage_type,
             param_plot_num=param_plot_num,
             policy_burn_in=policy_burn_in,
+            param_sharing=param_sharing,
         )
         if load_path is not None:
             ppo.policy.load_state_dict(torch.load(load_path))
@@ -407,32 +457,32 @@ def train_ppo(
 
 def main():
     #### ATARI ####
-    env_names = ["Breakout-ram-v4"]
-    solved_rewards = [300]  # stop training if avg_reward > solved_reward
-    actor_layers = (64, 64)
-    actor_activation = "relu"
-    critic_layers = (64, 64)
-    critic_activation = "relu"
+    # env_names = ["Breakout-ram-v4"]
+    # solved_rewards = [300]  # stop training if avg_reward > solved_reward
+    # actor_layers = (64, 64)
+    # actor_activation = "relu"
+    # critic_layers = (64, 64)
+    # critic_activation = "relu"
 
     log_interval = 20  # print avg reward in the interval
     max_episodes = 100000  # max training episodes
-    max_timesteps = None  # max timesteps in one episode
+    max_timesteps = 10000  # max timesteps in one episode
     update_timestep = 1024
-    # random_seeds = list(range(0, 5))
-    random_seeds = [55]
+    random_seeds = list(range(0, 5))
+    # random_seeds = [1]
     ppo_types = ["clip"]
     d_targs = [0]
     betas = [0]
 
     #### OTHER STUFF ####
-    # env_names = ["Acrobot-v1", "CartPole-v1", "MountainCar-v0"]
-    # solved_rewards = [-80, 195, -135]  # stop training if avg_reward > solved_reward
+    env_names = ["Acrobot-v1", "CartPole-v1", "MountainCar-v0"]
+    solved_rewards = [-80, 195, -135]  # stop training if avg_reward > solved_reward
     # env_names = ["Acrobot-v1"]
     # solved_rewards = [-80]  # stop training if avg_reward > solved_reward
-    # actor_layers = (32, 32)
-    # actor_activation = "tanh"
-    # critic_layers = (32, 32)
-    # critic_activation = "tanh"
+    actor_layers = (32, 32)
+    actor_activation = "tanh"
+    critic_layers = (32, 32)
+    critic_activation = "tanh"
     # # ppo_types = ["unclipped", "clip", "adaptive_KL", "fixed_KL"]
     # # ppo_types = ["unclipped"]
     # ppo_types = ["fixed_KL"]
@@ -453,7 +503,7 @@ def main():
                     hyp = HyperparametersPPO(
                         gamma=0.99,  # discount factor
                         lamda=0.95,
-                        learning_rate=2e-5,
+                        learning_rate=3.5e-3,
                         T=1024,  # update policy every n timesteps
                         epsilon=0.2,  # clip parameter for PPO
                         c1=0.5,
@@ -478,12 +528,14 @@ def main():
                             max_episodes=max_episodes,
                             max_timesteps=max_timesteps,
                             ppo_type=ppo_type,
-                            verbose=True,
+                            verbose=False,
                             date=date,
-                            render=True,
+                            # render=True,
                             param_plot_num=10,
-                            policy_burn_in=5,
-                            chooser_params=(100, 1),
+                            # policy_burn_in=5,
+                            # chooser_params=(100, 1),
+                            param_sharing=True,
+                            # param_sharing=False,
                         )
                     )
     finally:

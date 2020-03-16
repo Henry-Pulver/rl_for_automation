@@ -16,13 +16,16 @@ class DiscretePolicy(nn.Module):
         action_space: int,
         hidden_layers: Tuple,
         activation: str,
+        param_sharing: bool = False,
     ):
         super(DiscretePolicy, self).__init__()
+        self.param_sharing = param_sharing
 
-        layers = self.build_actor(
+        act_layers, shared_layers = self.build_actor(
             hidden_layers, state_dimension, action_space, activation
         )
-        self.actor_layers = nn.Sequential(*layers)
+        self.shared_layers = nn.Sequential(*shared_layers)
+        self.actor_layers = nn.Sequential(*act_layers)
 
     def build_actor(
         self,
@@ -31,17 +34,28 @@ class DiscretePolicy(nn.Module):
         action_space: int,
         activation: str,
     ):
-        sequential_layers = []
+        actor_layers, shared_layers = [], []
         prev_dimension = np.product(state_dimension)
-        for layer in hidden_layers:
-            sequential_layers.append(nn.Linear(prev_dimension, layer))
-            sequential_layers.append(get_activation(activation))
+        # print(f"len: {len(hidden_layers)}")
+        # print(self.param_sharing)
+        num_shared = len(hidden_layers) - 1 if self.param_sharing else 0
+        # print(f"num shared: {num_shared}")
+
+        for layer_count, layer in enumerate(hidden_layers):
+            if layer_count < num_shared:
+                shared_layers.append(nn.Linear(prev_dimension, layer))
+                shared_layers.append(get_activation(activation))
+            else:
+                actor_layers.append(nn.Linear(prev_dimension, layer))
+                actor_layers.append(get_activation(activation))
             prev_dimension = layer
-        sequential_layers.append(nn.Linear(prev_dimension, action_space))
-        sequential_layers.append(nn.Softmax(dim=-1))
-        return sequential_layers
+        actor_layers.append(nn.Linear(prev_dimension, action_space))
+        actor_layers.append(nn.Softmax(dim=-1))
+
+        return actor_layers, shared_layers
 
     def forward(self, x):
+        x = self.shared_layers(x) if self.param_sharing else x
         action_probs = self.actor_layers(x)
         return action_probs
 
@@ -59,7 +73,3 @@ class DiscretePolicy(nn.Module):
         dist_entropy = dist.entropy()
 
         return action_logprobs, dist_entropy
-
-
-# def enable_gpus(model: nn.Module) -> nn.Module:
-#     return model
