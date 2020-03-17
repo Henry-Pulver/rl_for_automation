@@ -1,8 +1,6 @@
 from typing import Callable
 import numpy as np
-import torch
 from algorithms.buffer import ExperienceBuffer
-import copy
 
 
 def get_advantage(experience_buffer: ExperienceBuffer, value_fn: Callable) -> np.array:
@@ -17,23 +15,31 @@ def get_advantage(experience_buffer: ExperienceBuffer, value_fn: Callable) -> np
     raise NotImplementedError
 
 
-def get_td_error(values: np.array, rewards: np.array, gamma: float):
+def get_td_error(values: np.array, buffer, gamma: float):
+    rewards = np.array(buffer.rewards)
     if not values.shape == rewards.shape:
         print(f"values.shape: {values.shape}")
         print(f"values: {values}")
-        print(f"rewards.shape: {rewards.shape}")
+        print(f"rewards.shape: {buffer.rewards.shape}")
     assert values.shape == rewards.shape
-    values_copy = copy.deepcopy(values)
-    next_step_values = np.append(values_copy, values_copy[-1])[1:]
-    td_errors = rewards + gamma * next_step_values - values.reshape((-1))
+    td_errors = []
+    next_value = 0
+    for reward, value, is_terminal in zip(
+            reversed(buffer.rewards), reversed(values), reversed(buffer.is_terminal)
+    ):
+        if is_terminal:
+            next_value = 0
+        td_errors.insert(0, reward + (gamma * next_value) - value)
+        next_value = value
     return td_errors
 
 
-def get_gae(td_errors, gamma: float, lamda: float) -> np.array:
+def get_gae(td_errors, is_terminals, gamma: float, lamda: float) -> np.array:
     """
     Class for implementing Generalised Advantage Estimation (https://arxiv.org/pdf/1506.02438.pdf)
 
     Args:
+        td_errors: TD-errors for each timestep in batch.
         gamma: Return discount factor for future rewards. 0 < gamma < 1. Special cases:
                gamma = 1 gives undiscounted returns. gamma = 0 gives return = next
                reward.
@@ -45,7 +51,9 @@ def get_gae(td_errors, gamma: float, lamda: float) -> np.array:
     assert 0 <= lamda <= 1
     gae = []
     future_gen_adv = 0
-    for td_error in reversed(td_errors):
+    for td_error, is_terminal in zip(reversed(td_errors), reversed(is_terminals)):
+        if is_terminal:
+            future_gen_adv = 0
         future_gen_adv = td_error + (gamma * lamda * future_gen_adv)
         gae.insert(0, future_gen_adv)
     return np.array(gae)

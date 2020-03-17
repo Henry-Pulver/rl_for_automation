@@ -12,6 +12,7 @@ from pathlib import Path
 
 from algorithms.action_chooser import ActionChooser
 from algorithms.actor_critic import ActorCritic
+from algorithms.advantage_estimation import get_td_error, get_gae
 from algorithms.buffer import PPOExperienceBuffer
 from algorithms.utils import generate_save_location, generate_ppo_hyp_str
 
@@ -78,7 +79,7 @@ class PPO:
         param_plot_num: int,
         entropy: bool = True,
         ppo_type: str = "clip",
-        advantage_type: str = "monte_carlo",
+        advantage_type: str = "monte_carlo_baseline",
         policy_burn_in: int = 0,
         param_sharing: bool = False,
     ):
@@ -89,6 +90,8 @@ class PPO:
         self.hyp = hyperparameters
         if self.ppo_type[-2:] == "KL":
             self.beta = self.hyp.beta
+        if self.adv_type == "gae":
+            assert self.hyp.lamda is not None
         self.param_sharing = param_sharing
 
         self.policy_burn_in = policy_burn_in
@@ -134,7 +137,7 @@ class PPO:
 
     def update(self, buffer: PPOExperienceBuffer, ep_num: int):
         # Monte Carlo estimate of state rewards:
-        rewards = []
+        returns = []
         discounted_reward = 0
         for reward, is_terminal in zip(
             reversed(buffer.rewards), reversed(buffer.is_terminal)
@@ -142,10 +145,12 @@ class PPO:
             if is_terminal:
                 discounted_reward = 0
             discounted_reward = reward + (self.gamma * discounted_reward)
-            rewards.insert(0, discounted_reward)
+            returns.insert(0, discounted_reward)
         # Normalizing the rewards:
-        rewards = torch.tensor(rewards).to(device)
-        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
+        returns = torch.tensor(returns).to(device)
+        returns_mean = returns.mean()
+        returns_std_dev = (returns.std() + 1e-5)
+        norm_returns = (returns - returns_mean) / returns_std_dev
 
         # convert list to tensor
         old_states = torch.stack(buffer.states).to(device).detach()
@@ -155,13 +160,17 @@ class PPO:
 
         # Optimize policy for K epochs:
         for k in range(self.K_epochs):
+
             loss = self.calculate_loss(
                 old_states,
                 old_actions,
                 old_logprobs,
                 old_probs,
-                rewards,
+                norm_returns,
+                buffer,
                 ep_num >= self.policy_burn_in,
+                returns_mean,
+                returns_std_dev,
             )
 
             # take gradient step
@@ -172,7 +181,7 @@ class PPO:
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
-    def calculate_loss(self, states, actions, old_logprobs, old_probs, rewards, update):
+    def calculate_loss(self, states, actions, old_logprobs, old_probs, norm_returns, buffer, update, returns_mean, returns_std_dev):
         # Evaluating old actions and values :
         logprobs, state_values, dist_entropy, action_probs = self.policy.evaluate(
             states, actions
@@ -183,7 +192,8 @@ class PPO:
 
         # Finding Loss:
         loss = 0
-        advantages = rewards - state_values.detach()
+        advantages = self.calculate_advantages(norm_returns, state_values.detach(),
+                                               buffer, returns_mean, returns_std_dev)
         surr1 = ratios * advantages
         if self.ppo_type == "clip":
             surr2 = (
@@ -205,7 +215,7 @@ class PPO:
             main_loss = -surr1
         if update:
             loss += main_loss
-        value_loss = self.hyp.c1 * self.MseLoss(state_values, rewards)
+        value_loss = self.hyp.c1 * self.MseLoss(state_values, norm_returns)
         loss += value_loss
 
         if self.entropy:
@@ -218,6 +228,20 @@ class PPO:
         )
 
         return loss
+
+    def calculate_advantages(self, norm_returns, state_values: torch.tensor, buffer: PPOExperienceBuffer, returns_mean: torch.Tensor, returns_std_dev: torch.Tensor):
+        if self.adv_type == "monte_carlo":
+            advantages = norm_returns
+        elif self.adv_type == "monte_carlo_baseline":
+            advantages = norm_returns - state_values
+        elif self.adv_type == "gae":
+            scaled_state_values = (state_values * returns_std_dev) + returns_mean
+            td_errors = get_td_error(scaled_state_values.numpy(), buffer, self.hyp.gamma)
+            unnormalised_advs = torch.from_numpy(get_gae(td_errors, buffer.is_terminal, self.hyp.gamma, self.hyp.lamda)).to(device)
+            advantages = (unnormalised_advs - unnormalised_advs.mean()) / (unnormalised_advs.std() + 1e-5)
+        else:
+            raise ValueError("Invalid advantage type used!")
+        return advantages
 
     def sample_nn_params(self):
         """Gets randomly sampled actor NN parameters from 1st layer."""
@@ -331,7 +355,7 @@ def train_ppo(
     render: bool = False,
     verbose: bool = False,
     ppo_type: str = "clip",
-    advantage_type: str = "monte_carlo",
+    advantage_type: str = "monte_carlo_baseline",
     date: Optional[str] = None,
     param_plot_num: int = 2,
     policy_burn_in: int = 0,
@@ -488,6 +512,7 @@ def main():
     # ppo_types = ["fixed_KL"]
     # d_targs = [1]
     # betas = [0.003]
+    adv_types = ["gae"]
 
     date = datetime.date.today().strftime("%d-%m-%Y")
 
@@ -496,21 +521,21 @@ def main():
     try:
         for env_name, solved_reward in zip(env_names, solved_rewards):
             outcomes.append(env_name)
-            for ppo_type in ppo_types:
-                outcomes.append(ppo_type)
+            for adv_type in adv_types:
+                outcomes.append(adv_type)
                 for d_targ, beta in zip(d_targs, betas):
                     outcomes.append((d_targ, beta))
                     hyp = HyperparametersPPO(
-                        gamma=0.99,  # discount factor
-                        lamda=0.95,
+                        gamma=0.99,             # discount factor
+                        lamda=0.95,             # GAE weighting factor
                         learning_rate=3.5e-3,
-                        T=1024,  # update policy every n timesteps
-                        epsilon=0.2,  # clip parameter for PPO
-                        c1=0.5,
-                        c2=0.01,
-                        num_epochs=3,  # update policy for K epochs
-                        d_targ=d_targ,
-                        beta=beta,
+                        T=1024,                 # update policy every n timesteps
+                        epsilon=0.2,            # clip parameter for PPO
+                        c1=0.5,                 # value function hyperparam
+                        c2=0.01,                # entropy hyperparam
+                        num_epochs=3,           # update policy for K epochs
+                        d_targ=d_targ,          # adaptive KL param
+                        beta=beta,              # fixed KL param
                     )
 
                     outcomes.append(
@@ -527,7 +552,8 @@ def main():
                             log_interval=log_interval,
                             max_episodes=max_episodes,
                             max_timesteps=max_timesteps,
-                            ppo_type=ppo_type,
+                            ppo_type=ppo_types[0],
+                            advantage_type=adv_type,
                             verbose=False,
                             date=date,
                             # render=True,
