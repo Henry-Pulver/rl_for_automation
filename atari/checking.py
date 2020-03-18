@@ -5,7 +5,7 @@ import cv2
 import torch
 from typing import Callable, Optional, Tuple
 
-from algorithms.actor_critic import ActorCritic
+from algorithms.actor_critic import ActorCritic, ActorCriticParams
 from algorithms.buffer import DemonstrationBuffer
 from algorithms.imitation_learning.behavioural_cloning import pick_action
 
@@ -62,19 +62,13 @@ def get_average_score(
     show_solution: bool,
     num_trials: int,
     env: gym.Env,
-    hidden_layers: Tuple,
-    activation: str,
-    param_sharing: bool,
+    actor_critic_params: ActorCriticParams,
 ) -> float:
     # Load in neural network from file
     network = ActorCritic(
         action_space=env.action_space.n,
         state_dimension=env.observation_space.shape,
-        actor_layers=hidden_layers,
-        critic_layers=hidden_layers,
-        actor_activation=activation,
-        critic_activation=activation,
-        param_sharing=param_sharing,
+        params=actor_critic_params,
     ).float()
     network.load_state_dict(torch.load(network_load, map_location=device))
     network.eval()
@@ -102,27 +96,21 @@ def get_average_score(
 game_ref = 0
 env = gym.make(GAME_STRINGS_TEST[game_ref]).env
 
-# network_load = "data/BC/31-01-2020/128-128-128-128/demos_50_seed_3.pt"
 network_load = "PPO_breakout_24000.pth"
 hidden_layers = (128, 128, 128, 128)
+activation = "relu"
+actor_critic_params = ActorCriticParams(
+    actor_layers=hidden_layers,
+    critic_layers=hidden_layers,
+    actor_activation=activation,
+    critic_activation=activation,
+    num_shared_layers=3,
+)
 get_average_score(
     network_load=Path(network_load),
     env=env,
     episode_timeout=10000,
     show_solution=True,
     num_trials=100,
-    hidden_layers=hidden_layers,
-    activation="relu",
-    param_sharing=True,
+    actor_critic_params=actor_critic_params,
 )
-
-# network_load = "data/BC/28-01-2020/best_breakout_nn.pt"
-# hidden_layers = (256, 256, 256)
-# get_average_score(
-#                     network_load=network_load,
-#                     env=env,
-#                     episode_timeout=10000,
-#                     show_solution=True,
-#                     num_trials=100,
-#                     hidden_layers=hidden_layers,
-#                 )

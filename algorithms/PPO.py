@@ -51,16 +51,6 @@ except TypeError:
     d_targ: (Optional) Adaptive KL target.
 """
 
-hyperparams_ppo_atari = HyperparametersPPO(
-    gamma=0.99,
-    lamda=0.95,
-    learning_rate=2e-3,
-    T=1024,
-    epsilon=0.2,
-    c2=0.01,
-    num_epochs=3,
-)
-
 
 class PPO:
     PPO_TYPES = ["clip", "adaptive_KL", "fixed_KL", "unclipped"]
@@ -78,6 +68,7 @@ class PPO:
         ppo_type: str = "clip",
         advantage_type: str = "monte_carlo_baseline",
         policy_burn_in: int = 0,
+        neural_net_save: str = "PPO_actor_critic.pth",
     ):
         assert ppo_type in self.PPO_TYPES
         assert advantage_type in self.ADVANTAGE_TYPES
@@ -97,18 +88,6 @@ class PPO:
         self.K_epochs = self.hyp.num_epochs
         self.entropy = entropy
 
-        self.save_path = save_path
-        self.save_path.mkdir(parents=True, exist_ok=True)
-
-        self.policy = ActorCritic(
-            state_dimension, action_space, actor_critic_params,
-        ).to(device)
-        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.lr,)
-        self.policy_old = ActorCritic(
-            state_dimension, action_space, actor_critic_params,
-        ).to(device)
-        self.policy_old.load_state_dict(self.policy.state_dict())
-
         self.determine_plotted_params(
             param_plot_num,
             actor_critic_params.actor_layers,
@@ -119,6 +98,22 @@ class PPO:
         self.actor_plot = []
         self.critic_plot = []
         self.loss_plots = {"entropy_loss": [], "clipped_loss": [], "value_loss": []}
+
+        self.save_path = save_path
+        self.neural_net_save = neural_net_save
+
+        self.policy = ActorCritic(
+            state_dimension, action_space, actor_critic_params,
+        ).to(device)
+        if self.save_path.exists():
+            net = self.load_saved_data()
+            self.policy.load_state_dict(net)
+        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.lr,)
+        self.policy_old = ActorCritic(
+            state_dimension, action_space, actor_critic_params,
+        ).to(device)
+        self.policy_old.load_state_dict(self.policy.state_dict())
+        self.save_path.mkdir(parents=True, exist_ok=True)
 
         self.MseLoss = nn.MSELoss()
 
@@ -308,6 +303,25 @@ class PPO:
                 f"{self.save_path}/mean_entropy_loss.npy",
                 np.array(self.loss_plots["entropy_loss"]),
             )
+        torch.save(self.policy.state_dict(), f"{self.save_path}/{self.neural_net_save}")
+
+    def load_saved_data(self):
+        self.actor_plot = list(np.load(f"{self.save_path}/policy_params.npy"))
+        self.critic_plot = list(np.save(f"{self.save_path}/critic_params.npy"))
+        if self.param_sharing:
+            self.shared_plot = list(np.load(f"{self.save_path}/shared_params.npy"))
+        # LEGACY - main loss saved as "clipped loss" even tho not necessarily clipped
+        self.loss_plots["clipped_loss"] = list(
+            np.load(f"{self.save_path}/mean_clipped_loss.npy")
+        )
+        self.loss_plots["value_loss"] = list(
+            np.load(f"{self.save_path}/mean_value_loss.npy")
+        )
+        if self.entropy:
+            self.loss_plots["entropy_loss"] = list(
+                np.load(f"{self.save_path}/mean_entropy_loss.npy")
+            )
+        return torch.load(self.save_path / self.neural_net_save, map_location=device)
 
     def determine_plotted_params(
         self,
@@ -393,7 +407,6 @@ def train_ppo(
             hyp_str,
             date,
         )
-        save_path.mkdir(parents=True, exist_ok=True)
 
         ppo = PPO(
             state_dimension=state_dim,
@@ -479,7 +492,6 @@ def train_ppo(
                     break
                 avg_length = 0
         episode_numbers.append((ep_num, total_steps))
-        torch.save(ppo.policy.state_dict(), f"{save_path}/PPO_actor_critic.pth")
     print(f"episode_numbers: {episode_numbers}")
     return episode_numbers
 
