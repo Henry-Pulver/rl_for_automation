@@ -25,7 +25,7 @@ def get_td_error(values: np.array, buffer, gamma: float):
     td_errors = []
     next_value = 0
     for reward, value, is_terminal in zip(
-            reversed(buffer.rewards), reversed(values), reversed(buffer.is_terminal)
+        reversed(buffer.rewards), reversed(values), reversed(buffer.is_terminal)
     ):
         if is_terminal:
             next_value = 0

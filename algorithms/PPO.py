@@ -11,7 +11,7 @@ from typing import Tuple, List, Optional
 from pathlib import Path
 
 from algorithms.action_chooser import ActionChooser
-from algorithms.actor_critic import ActorCritic
+from algorithms.actor_critic import ActorCritic, ActorCriticParams
 from algorithms.advantage_estimation import get_td_error, get_gae
 from algorithms.buffer import PPOExperienceBuffer
 from algorithms.utils import generate_save_location, generate_ppo_hyp_str
@@ -72,16 +72,12 @@ class PPO:
         action_space: int,
         save_path: Path,
         hyperparameters: HyperparametersPPO,
-        actor_layers: Tuple,
-        critic_layers: Tuple,
-        actor_activation: str,
-        critic_activation: str,
+        actor_critic_params: ActorCriticParams,
         param_plot_num: int,
         entropy: bool = True,
         ppo_type: str = "clip",
         advantage_type: str = "monte_carlo_baseline",
         policy_burn_in: int = 0,
-        param_sharing: bool = False,
     ):
         assert ppo_type in self.PPO_TYPES
         assert advantage_type in self.ADVANTAGE_TYPES
@@ -92,7 +88,7 @@ class PPO:
             self.beta = self.hyp.beta
         if self.adv_type == "gae":
             assert self.hyp.lamda is not None
-        self.param_sharing = param_sharing
+        self.param_sharing = actor_critic_params.num_shared_layers is not None
 
         self.policy_burn_in = policy_burn_in
         self.lr = self.hyp.learning_rate
@@ -105,28 +101,19 @@ class PPO:
         self.save_path.mkdir(parents=True, exist_ok=True)
 
         self.policy = ActorCritic(
-            state_dimension,
-            action_space,
-            actor_layers,
-            actor_activation,
-            critic_layers,
-            critic_activation,
-            param_sharing,
+            state_dimension, action_space, actor_critic_params,
         ).to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.lr,)
         self.policy_old = ActorCritic(
-            state_dimension,
-            action_space,
-            actor_layers,
-            actor_activation,
-            critic_layers,
-            critic_activation,
-            param_sharing,
+            state_dimension, action_space, actor_critic_params,
         ).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         self.determine_plotted_params(
-            param_plot_num, actor_layers, critic_layers, state_dimension
+            param_plot_num,
+            actor_critic_params.actor_layers,
+            actor_critic_params.critic_layers,
+            state_dimension,
         )
         self.shared_plot = []
         self.actor_plot = []
@@ -149,7 +136,7 @@ class PPO:
         # Normalizing the rewards:
         returns = torch.tensor(returns).to(device)
         returns_mean = returns.mean()
-        returns_std_dev = (returns.std() + 1e-5)
+        returns_std_dev = returns.std() + 1e-5
         norm_returns = (returns - returns_mean) / returns_std_dev
 
         # convert list to tensor
@@ -181,7 +168,18 @@ class PPO:
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
-    def calculate_loss(self, states, actions, old_logprobs, old_probs, norm_returns, buffer, update, returns_mean, returns_std_dev):
+    def calculate_loss(
+        self,
+        states,
+        actions,
+        old_logprobs,
+        old_probs,
+        norm_returns,
+        buffer,
+        update,
+        returns_mean,
+        returns_std_dev,
+    ):
         # Evaluating old actions and values :
         logprobs, state_values, dist_entropy, action_probs = self.policy.evaluate(
             states, actions
@@ -192,8 +190,9 @@ class PPO:
 
         # Finding Loss:
         loss = 0
-        advantages = self.calculate_advantages(norm_returns, state_values.detach(),
-                                               buffer, returns_mean, returns_std_dev)
+        advantages = self.calculate_advantages(
+            norm_returns, state_values.detach(), buffer, returns_mean, returns_std_dev
+        )
         surr1 = ratios * advantages
         if self.ppo_type == "clip":
             surr2 = (
@@ -229,16 +228,29 @@ class PPO:
 
         return loss
 
-    def calculate_advantages(self, norm_returns, state_values: torch.tensor, buffer: PPOExperienceBuffer, returns_mean: torch.Tensor, returns_std_dev: torch.Tensor):
+    def calculate_advantages(
+        self,
+        norm_returns,
+        state_values: torch.tensor,
+        buffer: PPOExperienceBuffer,
+        returns_mean: torch.Tensor,
+        returns_std_dev: torch.Tensor,
+    ):
         if self.adv_type == "monte_carlo":
             advantages = norm_returns
         elif self.adv_type == "monte_carlo_baseline":
             advantages = norm_returns - state_values
         elif self.adv_type == "gae":
             scaled_state_values = (state_values * returns_std_dev) + returns_mean
-            td_errors = get_td_error(scaled_state_values.numpy(), buffer, self.hyp.gamma)
-            unnormalised_advs = torch.from_numpy(get_gae(td_errors, buffer.is_terminal, self.hyp.gamma, self.hyp.lamda)).to(device)
-            advantages = (unnormalised_advs - unnormalised_advs.mean()) / (unnormalised_advs.std() + 1e-5)
+            td_errors = get_td_error(
+                scaled_state_values.numpy(), buffer, self.hyp.gamma
+            )
+            unnormalised_advs = torch.from_numpy(
+                get_gae(td_errors, buffer.is_terminal, self.hyp.gamma, self.hyp.lamda)
+            ).to(device)
+            advantages = (unnormalised_advs - unnormalised_advs.mean()) / (
+                unnormalised_advs.std() + 1e-5
+            )
         else:
             raise ValueError("Invalid advantage type used!")
         return advantages
@@ -340,14 +352,11 @@ def plot_episode_reward(save_path: Path, running_rewards: List):
 
 def train_ppo(
     env_name: str,
-    actor_layers: Tuple,
-    actor_activation: str,
-    critic_layers: Tuple,
-    critic_activation: str,
     max_episodes: int,
     update_timestep: int,
     log_interval: int,
     hyp: HyperparametersPPO,
+    actor_critic_params: ActorCriticParams,
     solved_reward: float,
     random_seeds: List,
     load_path: Optional[str] = None,
@@ -360,7 +369,6 @@ def train_ppo(
     param_plot_num: int = 2,
     policy_burn_in: int = 0,
     chooser_params: Tuple = (None, None, None),
-    param_sharing: bool = False,
 ):
     env = gym.make(env_name).env
     state_dim = env.observation_space.shape
@@ -378,7 +386,7 @@ def train_ppo(
         hyp_str = generate_ppo_hyp_str(ppo_type, hyp)
         save_path = generate_save_location(
             Path("data"),
-            actor_layers,
+            actor_critic_params.actor_layers,
             f"PPO-{ppo_type}",
             env_name,
             random_seed,
@@ -388,12 +396,9 @@ def train_ppo(
         save_path.mkdir(parents=True, exist_ok=True)
 
         ppo = PPO(
-            state_dim,
-            action_dim,
-            actor_layers=actor_layers,
-            critic_layers=critic_layers,
-            actor_activation=actor_activation,
-            critic_activation=critic_activation,
+            state_dimension=state_dim,
+            action_space=action_dim,
+            actor_critic_params=actor_critic_params,
             hyperparameters=hyp,
             save_path=save_path,
             entropy=True,
@@ -401,7 +406,6 @@ def train_ppo(
             advantage_type=advantage_type,
             param_plot_num=param_plot_num,
             policy_burn_in=policy_burn_in,
-            param_sharing=param_sharing,
         )
         if load_path is not None:
             ppo.policy.load_state_dict(torch.load(load_path))
@@ -464,7 +468,7 @@ def train_ppo(
             if ep_num % log_interval == 0:
                 running_reward = np.mean(running_rewards[-log_interval:])
                 print(
-                    f"Episode {ep_str} of {max_episodes}. \t Avg length: {avg_length} \t Reward: {running_reward}"
+                    f"Episode {ep_str} of {max_episodes}. \t Avg length: {int(avg_length)} \t Reward: {running_reward}"
                 )
                 plot_episode_reward(save_path, running_rewards)
                 ppo.save()
@@ -482,39 +486,24 @@ def train_ppo(
 
 def main():
     #### ATARI ####
-    # env_names = ["Breakout-ram-v4"]
-    # solved_rewards = [300]  # stop training if avg_reward > solved_reward
-    # actor_layers = (64, 64)
-    # actor_activation = "relu"
-    # critic_layers = (64, 64)
-    # critic_activation = "relu"
-
     log_interval = 20  # print avg reward in the interval
     max_episodes = 100000  # max training episodes
     max_timesteps = 10000  # max timesteps in one episode
     update_timestep = 1024
     random_seeds = list(range(0, 5))
-    # random_seeds = [1]
     ppo_types = ["clip"]
-    d_targs = [0]
-    betas = [0]
 
     #### OTHER STUFF ####
     env_names = ["Acrobot-v1", "CartPole-v1", "MountainCar-v0"]
     solved_rewards = [-80, 195, -135]  # stop training if avg_reward > solved_reward
-    # env_names = ["Acrobot-v1"]
-    # solved_rewards = [-80]  # stop training if avg_reward > solved_reward
-    actor_layers = (32, 32)
-    actor_activation = "tanh"
-    critic_layers = (32, 32)
-    critic_activation = "tanh"
-    # # ppo_types = ["unclipped", "clip", "adaptive_KL", "fixed_KL"]
-    # # ppo_types = ["unclipped"]
-    # ppo_types = ["fixed_KL"]
-    # d_targs = [1]
-    # betas = [0.003]
-    adv_types = ["gae", "monte_carlo"]
-    param_sharings = [True, False]
+    actor_critic_params = ActorCriticParams(
+        actor_layers=(32, 32),
+        actor_activation="tanh",
+        critic_layers=(32, 32),
+        critic_activation="tanh",
+        num_shared_layers=1,
+    )
+    adv_types = ["gae"]
     chooser_params = (100, 1, 100)
 
     date = datetime.date.today().strftime("%d-%m-%Y")
@@ -526,46 +515,40 @@ def main():
             outcomes.append(env_name)
             for adv_type in adv_types:
                 outcomes.append(adv_type)
-                for param_sharing in param_sharings:
-                    outcomes.append(param_sharing)
-                    hyp = HyperparametersPPO(
-                        gamma=0.99,             # discount factor
-                        lamda=0.95,             # GAE weighting factor
-                        learning_rate=2e-3,
-                        T=1024,                 # update policy every n timesteps
-                        epsilon=0.2,            # clip parameter for PPO
-                        c1=0.5,                 # value function hyperparam
-                        c2=0.01,                # entropy hyperparam
-                        num_epochs=3,           # update policy for K epochs
-                        # d_targ=d_targ,          # adaptive KL param
-                        # beta=beta,              # fixed KL param
-                    )
+                # for param_sharing in param_sharings:
+                hyp = HyperparametersPPO(
+                    gamma=0.99,  # discount factor
+                    lamda=0.95,  # GAE weighting factor
+                    learning_rate=3.5e-3,
+                    T=1024,  # update policy every n timesteps
+                    epsilon=0.2,  # clip parameter for PPO
+                    c1=0.5,  # value function hyperparam
+                    c2=0.01,  # entropy hyperparam
+                    num_epochs=3,  # update policy for K epochs
+                    # d_targ=d_targ,          # adaptive KL param
+                    # beta=beta,              # fixed KL param
+                )
 
-                    outcomes.append(
-                        train_ppo(
-                            env_name=env_name,
-                            solved_reward=solved_reward,
-                            hyp=hyp,
-                            random_seeds=random_seeds,
-                            actor_layers=actor_layers,
-                            actor_activation=actor_activation,
-                            critic_layers=critic_layers,
-                            critic_activation=critic_activation,
-                            update_timestep=update_timestep,
-                            log_interval=log_interval,
-                            max_episodes=max_episodes,
-                            max_timesteps=max_timesteps,
-                            ppo_type=ppo_types[0],
-                            advantage_type=adv_type,
-                            verbose=False,
-                            date=date,
-                            # render=True,
-                            param_plot_num=10,
-                            # policy_burn_in=5,
-                            # chooser_params=chooser_params,
-                            param_sharing=param_sharing,
-                        )
+                outcomes.append(
+                    train_ppo(
+                        env_name=env_name,
+                        solved_reward=solved_reward,
+                        hyp=hyp,
+                        actor_critic_params=actor_critic_params,
+                        random_seeds=random_seeds,
+                        update_timestep=update_timestep,
+                        log_interval=log_interval,
+                        max_episodes=max_episodes,
+                        max_timesteps=max_timesteps,
+                        ppo_type=ppo_types[0],
+                        advantage_type=adv_type,
+                        date=date,
+                        # render=True,
+                        param_plot_num=10,
+                        # policy_burn_in=5,
+                        # chooser_params=chooser_params,
                     )
+                )
     finally:
         print(f"outcomes:")
         for outcome in outcomes:

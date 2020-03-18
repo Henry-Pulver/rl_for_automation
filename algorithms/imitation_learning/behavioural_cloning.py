@@ -6,7 +6,7 @@ import torch.nn as nn
 from typing import Tuple
 import logging
 
-from algorithms.discrete_policy import DiscretePolicy
+from algorithms.discrete_policy import DiscretePolicy, DiscretePolicyParams
 from algorithms.buffer import DemonstrationBuffer
 
 
@@ -21,16 +21,14 @@ class BCTrainer:
         learning_rate: float,
         state_space_size: Tuple,
         action_space_size: int,
-        hidden_layers: Tuple,
-        activation: str,
+        discrete_policy_params: DiscretePolicyParams,
     ):
         self.state_space_size = state_space_size
         self.action_space_size = action_space_size
         self.network = DiscretePolicy(
             state_dimension=state_space_size,
             action_space=action_space_size,
-            hidden_layers=hidden_layers,
-            activation=activation,
+            params=discrete_policy_params,
         ).float()
 
         self.demo_buffer = DemonstrationBuffer(
@@ -101,17 +99,15 @@ def train_network(
     demo_path: Path,
     action_space_size: int,
     state_space_size: Tuple,
-    hidden_layers: Tuple,
     learning_rate: float,
-    activation: str,
+    discrete_policy_params: DiscretePolicyParams,
 ):
     trainer = BCTrainer(
         demo_path=demo_path,
         learning_rate=learning_rate,
         action_space_size=action_space_size,
         state_space_size=state_space_size,
-        hidden_layers=hidden_layers,
-        activation=activation,
+        discrete_policy_params=discrete_policy_params,
     )
     trainer.train_network(
         num_epochs=num_epochs, num_demos=num_demos, minibatch_size=minibatch_size

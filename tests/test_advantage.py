@@ -6,8 +6,8 @@ from algorithms.buffer import PPOExperienceBuffer
 def test_td_error():
     values = np.array([8, 8, 7, 6, 5, 4, 3, 2, 1])
     rewards = np.array([2, 0, 4, 0, 0, 1, 4, 2, 0])
-    is_terminal = np.array([False, ] * 9)
-    buffer = PPOExperienceBuffer(action_space_size=3, state_dimension=(2, ))
+    is_terminal = np.array([False,] * 9)
+    buffer = PPOExperienceBuffer(action_space_size=3, state_dimension=(2,))
     buffer.is_terminal = is_terminal
     buffer.rewards = rewards
     gamma = 0.8
@@ -30,7 +30,7 @@ def test_gae():
     test_buffer = PPOExperienceBuffer(state_dimension=(1,), action_space_size=2)
     states = np.array([-10, -8, -9, -6, -5, -3, -3, -2, -1])
     rewards = np.array([2, 0, 4, 0, 0, 1, 4, 2, 0])
-    is_terminals = np.array([False, ] * 9)
+    is_terminals = np.array([False,] * 9)
     test_buffer.rewards = rewards
     test_buffer.is_terminal = is_terminals
     # actions = [1, 1, 0, 1, 1, 0, 0, 0, 1]
@@ -40,7 +40,9 @@ def test_gae():
     lamda = 0.8
     value_fn = lambda x: np.array(-0.7 * x).reshape(-1)
     td_errors = get_td_error(value_fn(states), test_buffer, gamma)
-    gae = get_gae(td_errors=td_errors, is_terminals=is_terminals, gamma=gamma, lamda=lamda)
+    gae = get_gae(
+        td_errors=td_errors, is_terminals=is_terminals, gamma=gamma, lamda=lamda
+    )
     true_gae = [
         -0.8154469945062197,
         -0.4616359289159674,

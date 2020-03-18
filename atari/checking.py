@@ -114,7 +114,7 @@ get_average_score(
     hidden_layers=hidden_layers,
     activation="relu",
     param_sharing=True,
-                )
+)
 
 # network_load = "data/BC/28-01-2020/best_breakout_nn.pt"
 # hidden_layers = (256, 256, 256)

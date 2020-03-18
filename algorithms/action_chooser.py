@@ -2,7 +2,12 @@ from typing import Optional
 
 
 class ActionChooser:
-    def __init__(self, action_change_freq: Optional[int], action_choice: Optional[int], increase_freq: int):
+    def __init__(
+        self,
+        action_change_freq: Optional[int],
+        action_choice: Optional[int],
+        increase_freq: int,
+    ):
         self.timestep = 0
         self.reset_count = 0
         self.action_change_freq = action_change_freq

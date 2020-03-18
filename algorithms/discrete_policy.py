@@ -3,26 +3,42 @@ import torch.nn as nn
 import numpy as np
 from typing import Tuple
 from torch.distributions import Categorical
+from collections import namedtuple
 
 from algorithms.utils import get_activation
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+params_names = (
+    "actor_layers",
+    "actor_activation",
+    "num_shared_layers",
+)
+try:
+    DiscretePolicyParams = namedtuple(
+        "DiscretePolicyParams", params_names, defaults=(None,) * len(params_names),
+    )
+except TypeError:
+    DiscretePolicyParams = namedtuple("DiscretePolicyParams", params_names)
+    DiscretePolicyParams.__new__.__defaults__ = (None,) * len(params_names)
+"""
+    actor_layers: Tuple of actor layer sizes. 
+    actor_activation: String defining the activation function of every actor layer.
+    num_shared_layers: (Optional) number of layers to share across actor and critic.
+"""
+
+
 class DiscretePolicy(nn.Module):
     def __init__(
-        self,
-        state_dimension: Tuple,
-        action_space: int,
-        hidden_layers: Tuple,
-        activation: str,
-        param_sharing: bool = False,
+        self, state_dimension: Tuple, action_space: int, params: DiscretePolicyParams,
     ):
         super(DiscretePolicy, self).__init__()
-        self.param_sharing = param_sharing
+        self.param_sharing = params.num_shared_layers is not None
+        self.params = params
 
         act_layers, shared_layers = self.build_actor(
-            hidden_layers, state_dimension, action_space, activation
+            params.actor_layers, state_dimension, action_space, params.actor_activation
         )
         self.shared_layers = nn.Sequential(*shared_layers)
         self.actor_layers = nn.Sequential(*act_layers)
@@ -36,7 +52,7 @@ class DiscretePolicy(nn.Module):
     ):
         actor_layers, shared_layers = [], []
         prev_dimension = np.product(state_dimension)
-        num_shared = len(hidden_layers) - 1 if self.param_sharing else 0
+        num_shared = self.params.num_shared_layers if self.param_sharing else 0
 
         for layer_count, layer in enumerate(hidden_layers):
             if layer_count < num_shared:

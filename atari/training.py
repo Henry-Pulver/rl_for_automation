@@ -1,12 +1,11 @@
 import numpy as np
 import torch
-import torch.nn as nn
 from pathlib import Path
-import logging
 import gym
 import datetime
 
 from algorithms.PPO import PPO, HyperparametersPPO
+from algorithms.discrete_policy import DiscretePolicyParams
 from algorithms.imitation_learning.behavioural_cloning import train_network
 from algorithms.buffer import DemonstrationBuffer
 from algorithms.utils import generate_save_location
@@ -81,7 +80,6 @@ def train_bc():
 
         env = gym.make(GAME_STRINGS_TEST[game_ref]).env
 
-        # logging.basicConfig(filename=f"{save_location}/{date}.log", level=logging.INFO)
         max_random_seed = 4
         outer_means = []
         for demo, epoch_num, minibatch_size in zip(
@@ -96,6 +94,10 @@ def train_bc():
                 )
                 file_save_location.mkdir(parents=True, exist_ok=True)
 
+                discrete_policy_params = DiscretePolicyParams(
+                    actor_layers=hidden_layers, actor_activation="relu"
+                )
+
                 train_network(
                     file_save_location,
                     filename,
@@ -105,9 +107,8 @@ def train_bc():
                     demo_path=demo_path,
                     action_space_size=env.action_space.n,
                     state_space_size=env.observation_space.shape,
-                    hidden_layers=hidden_layers,
+                    discrete_policy_params=discrete_policy_params,
                     learning_rate=1e-7,
-                    activation="relu",
                 )
 
                 network_load = Path(f"{save_location}/{filename}.pt")
@@ -120,6 +121,7 @@ def train_bc():
                         num_trials=2,
                         hidden_layers=hidden_layers,
                         activation="relu",
+                        param_sharing=False,
                     )
                 )
             outer_means.append(means)
