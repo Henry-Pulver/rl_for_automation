@@ -359,7 +359,7 @@ def train_ppo(
     date: Optional[str] = None,
     param_plot_num: int = 2,
     policy_burn_in: int = 0,
-    chooser_params: Tuple = (None, None),
+    chooser_params: Tuple = (None, None, None),
     param_sharing: bool = False,
 ):
     env = gym.make(env_name).env
@@ -411,9 +411,10 @@ def train_ppo(
         running_rewards = []
         avg_length = 0
         timestep = 0
-        action_chooser = ActionChooser(chooser_params[0], chooser_params[1])
+        action_chooser = ActionChooser(*chooser_params)
 
         # training loop
+        total_steps = 0
         for ep_num in range(1, max_episodes + 1):
             state = env.reset()
             ep_total_reward = 0
@@ -448,7 +449,8 @@ def train_ppo(
                 if done:
                     break
 
-            avg_length += t
+            avg_length += t / log_interval
+            total_steps += t
             running_rewards.append(ep_total_reward)
 
             ep_str = ("{0:0" + f"{len(str(max_episodes))}" + "d}").format(ep_num)
@@ -460,7 +462,6 @@ def train_ppo(
 
             # logging
             if ep_num % log_interval == 0:
-                avg_length = int(avg_length / log_interval)
                 running_reward = np.mean(running_rewards[-log_interval:])
                 print(
                     f"Episode {ep_str} of {max_episodes}. \t Avg length: {avg_length} \t Reward: {running_reward}"
@@ -473,7 +474,7 @@ def train_ppo(
                     print("########## Solved! ##########")
                     break
                 avg_length = 0
-        episode_numbers.append(ep_num)
+        episode_numbers.append((ep_num, total_steps))
         torch.save(ppo.policy.state_dict(), f"{save_path}/PPO_actor_critic.pth")
     print(f"episode_numbers: {episode_numbers}")
     return episode_numbers
@@ -512,7 +513,9 @@ def main():
     # ppo_types = ["fixed_KL"]
     # d_targs = [1]
     # betas = [0.003]
-    adv_types = ["gae"]
+    adv_types = ["gae", "monte_carlo"]
+    param_sharings = [True, False]
+    chooser_params = (100, 1, 100)
 
     date = datetime.date.today().strftime("%d-%m-%Y")
 
@@ -523,19 +526,19 @@ def main():
             outcomes.append(env_name)
             for adv_type in adv_types:
                 outcomes.append(adv_type)
-                for d_targ, beta in zip(d_targs, betas):
-                    outcomes.append((d_targ, beta))
+                for param_sharing in param_sharings:
+                    outcomes.append(param_sharing)
                     hyp = HyperparametersPPO(
                         gamma=0.99,             # discount factor
                         lamda=0.95,             # GAE weighting factor
-                        learning_rate=3.5e-3,
+                        learning_rate=2e-3,
                         T=1024,                 # update policy every n timesteps
                         epsilon=0.2,            # clip parameter for PPO
                         c1=0.5,                 # value function hyperparam
                         c2=0.01,                # entropy hyperparam
                         num_epochs=3,           # update policy for K epochs
-                        d_targ=d_targ,          # adaptive KL param
-                        beta=beta,              # fixed KL param
+                        # d_targ=d_targ,          # adaptive KL param
+                        # beta=beta,              # fixed KL param
                     )
 
                     outcomes.append(
@@ -559,9 +562,8 @@ def main():
                             # render=True,
                             param_plot_num=10,
                             # policy_burn_in=5,
-                            # chooser_params=(100, 1),
-                            param_sharing=True,
-                            # param_sharing=False,
+                            # chooser_params=chooser_params,
+                            param_sharing=param_sharing,
                         )
                     )
     finally:

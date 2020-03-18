@@ -36,10 +36,7 @@ class DiscretePolicy(nn.Module):
     ):
         actor_layers, shared_layers = [], []
         prev_dimension = np.product(state_dimension)
-        # print(f"len: {len(hidden_layers)}")
-        # print(self.param_sharing)
         num_shared = len(hidden_layers) - 1 if self.param_sharing else 0
-        # print(f"num shared: {num_shared}")
 
         for layer_count, layer in enumerate(hidden_layers):
             if layer_count < num_shared:
