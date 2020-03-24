@@ -150,15 +150,15 @@ class GAILTrainer(PPO):
             "value_loss": [],
         }
 
-    def sample_nn_params(self):
-        actor_params, critic_params = super(GAILTrainer, self).sample_nn_params()
+    def record_nn_params(self):
+        actor_params, critic_params = super(GAILTrainer, self).record_nn_params()
         discrim_params = self.discriminator.state_dict()["discrim_layers.0.weight"].numpy()[
             self.discrim_params_x, self.discrim_params_y
         ]
         return actor_params, critic_params, discrim_params
 
     def record_policy_params(self):
-        actor_params, critic_params, discrim_params = self.sample_nn_params()
+        actor_params, critic_params, discrim_params = self.record_nn_params()
         self.actor_plot.append(actor_params)
         self.critic_plot.append(critic_params)
         self.discrim_plot.append(discrim_params)
@@ -173,7 +173,7 @@ class GAILTrainer(PPO):
         )
 
     def update(self, buffer: ExperienceBuffer):
-
+        pass
 
 
 

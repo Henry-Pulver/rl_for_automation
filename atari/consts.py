@@ -30,3 +30,10 @@ GAME_STRINGS_TEST = [
     "SpaceInvaders-ramNoFrameskip-v4",
     "BeamRider-ramNoFrameskip-v4",
 ]
+SOLVED_SCORES = [
+    300,
+    4000,
+    20,
+    1500,
+    4000,
+]

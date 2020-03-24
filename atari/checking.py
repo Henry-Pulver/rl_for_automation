@@ -3,7 +3,7 @@ import gym
 import numpy as np
 import cv2
 import torch
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 from algorithms.actor_critic import ActorCritic, ActorCriticParams
 from algorithms.buffer import DemonstrationBuffer
@@ -23,12 +23,13 @@ def run_solution(
     demo_buffer: Optional[DemonstrationBuffer] = None,
     video_fps: int = 60,
     verbose: bool = False,
+    video_filename: str = "output",
 ) -> int:
     render_type = "rgb_array" if record_video else "human"
 
     if record_video:
-        fourcc = cv2.VideoWriter_fourcc(*"XVID")
-        out = cv2.VideoWriter("output.avi", fourcc, video_fps, (600, 400))
+        fourcc = cv2.VideoWriter_fourcc(*"H264")
+        out = cv2.VideoWriter(f"{video_filename}.mp4", fourcc, video_fps, (600, 400))
     env.seed(np.random.randint(low=0, high=2000))
     state = env.reset()
     done = False
@@ -75,16 +76,19 @@ def get_average_score(
 
     # Run the env, record the scores
     scores = []
-    for _ in range(num_trials):
+    for trial in range(num_trials):
+        video_filename = f"PPO_breakout_{trial}"
         scores.append(
             run_solution(
                 lambda x: pick_action(state=x, network=network),
-                record_video=False,
+                record_video=False,  # Ignore this - instead use Windows + G and record
                 env=env,
                 show_solution=show_solution,
                 episode_timeout=episode_timeout,
+                video_filename=video_filename,
             )
         )
+        print(scores[-1])
     mean_score = np.mean(scores)
     print(f"\nScores: {scores}")
     # logging.info(f"\nScores: {scores}")
@@ -96,7 +100,7 @@ def get_average_score(
 game_ref = 0
 env = gym.make(GAME_STRINGS_TEST[game_ref]).env
 
-network_load = "PPO_breakout_24000.pth"
+network_load = "data/colab_PPO/PPO_actor_critic.pth"
 hidden_layers = (128, 128, 128, 128)
 activation = "relu"
 actor_critic_params = ActorCriticParams(

@@ -11,7 +11,13 @@ from mountain_car.REINFORCE_next_states import (
 from mountain_car.REINFORCE_actions import FEATURE_POLYNOMIAL_ORDER as action_poly_order
 
 
-def plot(load_path: Path, files: List, single_plots: List):
+def plot(
+    load_path: Path,
+    files: List,
+    single_plots: List,
+    min_score: float,
+    reward_smoothing_weight: float,
+):
     for single_plot, file in zip(single_plots, files):
         fig = go.Figure()
         y = np.load(f"{load_path}/{file}", allow_pickle=True).T
@@ -25,6 +31,28 @@ def plot(load_path: Path, files: List, single_plots: List):
         fig.write_html(
             f"{load_path}/{file[:-4]}.html", auto_open=True,
         )
+        if file == "rewards.npy":
+            fig2 = go.Figure()
+            x = np.linspace(0, y.shape[0], y.shape[0] + 1)
+            y_smoothed = smooth_rewards(y, reward_smoothing_weight, min_score)
+            fig2.add_trace(go.Scatter(x=x, y=y_smoothed))
+            fig2.write_html(
+                f"{load_path}/smoothed_rewards.html", auto_open=True,
+            )
+
+
+def smooth_rewards(
+    rewards: np.ndarray, smoothing_weight: float, min_score: float
+) -> np.ndarray:
+    assert 0 < smoothing_weight < 1
+    smoothed_rewards = np.zeros(rewards.shape)
+    prev_reward = min_score
+    for count, reward in enumerate(rewards):
+        smoothed_rewards[count] = (
+            smoothing_weight * prev_reward + (1 - smoothing_weight) * reward
+        )
+        prev_reward = smoothed_rewards[count]
+    return smoothed_rewards
 
 
 def plot_reinforce_concatenated_weights_and_performance(
@@ -217,18 +245,21 @@ def main():
     #
     #     plot(load_path, files, single_plots)
 
-    load_path = Path(f"../drive")
+    load_path = Path(
+        f"../atari/data/colab_PPO/Pong-ram-v4/22-03-2020/hyp-0.2/128-128-128-128/seed-0/"
+    )
     files = [
         "mean_clipped_loss.npy",
         "mean_entropy_loss.npy",
         "mean_value_loss.npy",
         "policy_params.npy",
+        "shared_params.npy",
         "critic_params.npy",
         "rewards.npy",
     ]
-    single_plots = [True, True, True, False, False, True]
+    single_plots = [True, True, True, False, False, False, True]
 
-    plot(load_path, files, single_plots)
+    plot(load_path, files, single_plots, min_score=-21, reward_smoothing_weight=0.99)
 
     # plot_reinforce_weights_and_performance(
     #     ref_num=51,

@@ -5,14 +5,14 @@ from torch.distributions import Categorical
 from collections import namedtuple
 from typing import Tuple
 
-from algorithms.discrete_policy import DiscretePolicy, DiscretePolicyParams
-from algorithms.buffer import PPOExperienceBuffer
-from algorithms.utils import get_activation
+from discrete_policy import DiscretePolicy, DiscretePolicyParams
+from buffer import PPOExperienceBuffer
+from utils import get_activation
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-params_names = (
+param_names = (
     "actor_layers",
     "critic_layers",
     "actor_activation",
@@ -21,11 +21,11 @@ params_names = (
 )
 try:
     ActorCriticParams = namedtuple(
-        "ActorCriticParams", params_names, defaults=(None,) * len(params_names),
+        "ActorCriticParams", param_names, defaults=(None,) * len(param_names),
     )
 except TypeError:
-    ActorCriticParams = namedtuple("ActorCriticParams", params_names)
-    ActorCriticParams.__new__.__defaults__ = (None,) * len(params_names)
+    ActorCriticParams = namedtuple("ActorCriticParams", param_names)
+    ActorCriticParams.__new__.__defaults__ = (None,) * len(param_names)
 """
     actor_layers: Tuple of actor layer sizes. 
     critic_layers: Tuple of critic layer sizes.

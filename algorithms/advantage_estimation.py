@@ -1,6 +1,6 @@
 from typing import Callable
 import numpy as np
-from algorithms.buffer import ExperienceBuffer
+from buffer import ExperienceBuffer
 
 
 def get_advantage(experience_buffer: ExperienceBuffer, value_fn: Callable) -> np.array:

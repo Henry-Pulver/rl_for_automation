@@ -5,23 +5,23 @@ from typing import Tuple
 from torch.distributions import Categorical
 from collections import namedtuple
 
-from algorithms.utils import get_activation
+from utils import get_activation
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-params_names = (
+param_names = (
     "actor_layers",
     "actor_activation",
     "num_shared_layers",
 )
 try:
     DiscretePolicyParams = namedtuple(
-        "DiscretePolicyParams", params_names, defaults=(None,) * len(params_names),
+        "DiscretePolicyParams", param_names, defaults=(None,) * len(param_names),
     )
 except TypeError:
-    DiscretePolicyParams = namedtuple("DiscretePolicyParams", params_names)
-    DiscretePolicyParams.__new__.__defaults__ = (None,) * len(params_names)
+    DiscretePolicyParams = namedtuple("DiscretePolicyParams", param_names)
+    DiscretePolicyParams.__new__.__defaults__ = (None,) * len(param_names)
 """
     actor_layers: Tuple of actor layer sizes. 
     actor_activation: String defining the activation function of every actor layer.
