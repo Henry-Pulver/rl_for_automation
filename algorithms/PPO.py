@@ -111,7 +111,7 @@ class PPO:
             state_dimension, action_space, actor_critic_params,
         ).to(device)
         if self.neural_net_save.exists():
-            self.load_network()
+            self._load_network()
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.lr,)
         self.policy_old = ActorCritic(
             state_dimension, action_space, actor_critic_params,
@@ -221,9 +221,9 @@ class PPO:
 
         self.plotter.record_data(
             {
-                "mean_entropy_loss": -0.01 * dist_entropy.mean().detach().numpy(),
-                "mean_clipped_loss": main_loss.mean().detach().numpy(),
-                "mean_value_loss": value_loss.detach().numpy(),
+                "mean_entropy_loss": -0.01 * dist_entropy.mean().detach().cpu().numpy(),
+                "mean_clipped_loss": main_loss.mean().detach().cpu().numpy(),
+                "mean_value_loss": value_loss.detach().cpu().numpy(),
             }
         )
         return loss
@@ -243,7 +243,7 @@ class PPO:
         elif self.adv_type == "gae":
             scaled_state_values = (state_values * returns_std_dev) + returns_mean
             td_errors = get_td_error(
-                scaled_state_values.numpy(), buffer, self.hyp.gamma
+                scaled_state_values.cpu().numpy(), buffer, self.hyp.gamma
             )
             unnormalised_advs = torch.from_numpy(
                 get_gae(td_errors, buffer.is_terminal, self.hyp.gamma, self.hyp.lamda)
@@ -260,13 +260,18 @@ class PPO:
         names, x_params, y_params = self.plotter.get_param_plot_nums()
         sampled_params = {}
         for name, x_param, y_param in zip(names, x_params, y_params):
-            sampled_params[name] = self.policy.state_dict()[name].numpy()[x_param, y_param]
+            sampled_params[name] = self.policy.state_dict()[name].cpu().numpy()[x_param, y_param]
         self.plotter.record_data(sampled_params)
 
-    def save_network(self):
+    def save(self):
+        self._save_network()
+        self.plotter.save_plots()
+
+    def _save_network(self):
         torch.save(self.policy.state_dict(), f"{self.neural_net_save}")
 
-    def load_network(self):
+    def _load_network(self):
+        print(f"Loading neural network saved at: {self.neural_net_save}")
         net = torch.load(self.neural_net_save, map_location=device)
         self.policy.load_state_dict(net)
 
@@ -386,7 +391,7 @@ def train_ppo(
                     print(
                         f"Episode {ep_str} of {max_episodes}. \t Avg length: {int(avg_length)} \t Reward: {running_reward}"
                     )
-                    ppo.save_network()
+                    ppo.save()
 
                     # stop training if avg_reward > solved_reward
                     if running_reward > solved_reward:
@@ -397,7 +402,7 @@ def train_ppo(
         print(f"episode_numbers: {episode_numbers}")
         return episode_numbers
     except KeyboardInterrupt as interrupt:
-        ppo.plotter.save_plots()
+        ppo.save()
         raise interrupt
 
 

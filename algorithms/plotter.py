@@ -10,6 +10,7 @@ class Count:
         self.datatype = datatype
         self.count_save_path = save_path / f"{name}.npy"
         if self.count_save_path.exists():
+            print(f"Loading count: {name}")
             try:
                 self.value = np.load(f"{self.count_save_path}")
             except ValueError:
@@ -37,6 +38,7 @@ class Plot:
         self.plot_save_path = save_path / self.name
         self.max_plot_size = max_plot_size
         if (self.plot_save_path / self._get_filename(1)).exists():
+            print(f"Loading plot: {name}")
             self.file_num = self._find_newest_plot()
             self.plot = list(
                 np.load(f"{self.plot_save_path}/{self._get_filename(self.file_num)}", allow_pickle=True)

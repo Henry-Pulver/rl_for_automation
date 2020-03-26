@@ -11,16 +11,21 @@ from mountain_car.REINFORCE_next_states import (
 from mountain_car.REINFORCE_actions import FEATURE_POLYNOMIAL_ORDER as action_poly_order
 
 
+def print_counts(load_path: Path, counts: List):
+    for count in counts:
+        print(f"{count}: {np.load(f'{load_path}/{count}.npy')}")
+
+
 def plot(
     load_path: Path,
-    files: List,
+    plots: List,
     single_plots: List,
     min_score: float,
     reward_smoothing_weight: float,
 ):
-    for single_plot, file in zip(single_plots, files):
+    for single_plot, plot in zip(single_plots, plots):
         fig = go.Figure()
-        y = np.load(f"{load_path}/{file}", allow_pickle=True).T
+        y = np.load(f"{load_path}/{plot}/{plot}.npy", allow_pickle=True).T
         if not single_plot:
             x = np.linspace(0, y.shape[1], y.shape[1] + 1)
             for theta in y:
@@ -29,15 +34,15 @@ def plot(
             x = np.linspace(0, y.shape[0], y.shape[0] + 1)
             fig.add_trace(go.Scatter(x=x, y=y))
         fig.write_html(
-            f"{load_path}/{file[:-4]}.html", auto_open=True,
+            f"{load_path}/{plot}.html", auto_open=True,
         )
-        if file == "rewards.npy":
+        if plot == "rewards.":
             fig2 = go.Figure()
             x = np.linspace(0, y.shape[0], y.shape[0] + 1)
             y_smoothed = smooth_rewards(y, reward_smoothing_weight, min_score)
             fig2.add_trace(go.Scatter(x=x, y=y_smoothed))
             fig2.write_html(
-                f"{load_path}/smoothed_rewards.html", auto_open=True,
+                f"{load_path}/rewards/smoothed_rewards.html", auto_open=True,
             )
 
 
@@ -246,20 +251,24 @@ def main():
     #     plot(load_path, files, single_plots)
 
     load_path = Path(
-        f"../atari/data/colab_PPO/Pong-ram-v4/22-03-2020/hyp-0.2/128-128-128-128/seed-0/"
+        f"../atari/data/colab_PPO/Pong-ram-v4/24-03-2020/hyp-0.2/128-128-128-128/seed-0/"
     )
-    files = [
-        "mean_clipped_loss.npy",
-        "mean_entropy_loss.npy",
-        "mean_value_loss.npy",
-        "policy_params.npy",
-        "shared_params.npy",
-        "critic_params.npy",
-        "rewards.npy",
+    plots = [
+        "mean_clipped_loss",
+        "mean_entropy_loss",
+        "mean_value_loss",
+        "shared_layers.0.weight",
+        "shared_layers.2.weight",
+        "shared_layers.4.weight",
+        "actor_layers.0.weight",
+        "critic_layers.0.weight",
+        "rewards",
     ]
+    counts = ["num_steps_taken", "episode_num"]
+    print_counts(load_path, counts)
     single_plots = [True, True, True, False, False, False, True]
 
-    plot(load_path, files, single_plots, min_score=-21, reward_smoothing_weight=0.99)
+    plot(load_path, plots, single_plots, min_score=-21, reward_smoothing_weight=0.99)
 
     # plot_reinforce_weights_and_performance(
     #     ref_num=51,
