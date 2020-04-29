@@ -1,9 +1,8 @@
 import numpy as np
-import torch
 from pathlib import Path
 import plotly.graph_objects as go
 
-from mountain_car.consts import (
+from consts import (
     DISC_CONSTS,
     VELOCITY_VALUES,
     POSITION_VALUES,
@@ -11,8 +10,6 @@ from mountain_car.consts import (
     NUM_POSITIONS,
 )
 from REINFORCE_actions import Policy
-from algorithms.discrete_policy import DiscretePolicy
-from imitation.behavioural_cloning import action_probs
 
 
 def load_data(load_path: Path) -> np.array:

@@ -1,27 +1,28 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Optional
 from torch.distributions import Categorical
 from collections import namedtuple
 
+from buffer import PPOExperienceBuffer
 from utils import get_activation
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-param_names = (
+policy_params = (
     "actor_layers",
     "actor_activation",
     "num_shared_layers",
 )
 try:
     DiscretePolicyParams = namedtuple(
-        "DiscretePolicyParams", param_names, defaults=(None,) * len(param_names),
+        "DiscretePolicyParams", policy_params, defaults=(None,) * len(policy_params),
     )
 except TypeError:
-    DiscretePolicyParams = namedtuple("DiscretePolicyParams", param_names)
-    DiscretePolicyParams.__new__.__defaults__ = (None,) * len(param_names)
+    DiscretePolicyParams = namedtuple("DiscretePolicyParams", policy_params)
+    DiscretePolicyParams.__new__.__defaults__ = (None,) * len(policy_params)
 """
     actor_layers: Tuple of actor layer sizes. 
     actor_activation: String defining the activation function of every actor layer.
@@ -72,12 +73,6 @@ class DiscretePolicy(nn.Module):
         action_probs = self.actor_layers(x)
         return action_probs
 
-    def pick_action(self, x):
-        action_probs = self.forward(x)
-
-        dist = Categorical(action_probs)
-        return dist.sample()
-
     def evaluate(self, state: np.ndarray, action: torch.tensor) -> Tuple:
         action_probs = self.forward(state)
         dist = Categorical(action_probs)
@@ -85,4 +80,24 @@ class DiscretePolicy(nn.Module):
         action_logprobs = dist.log_prob(action)
         dist_entropy = dist.entropy()
 
-        return action_logprobs, dist_entropy
+        return action_logprobs, None, dist_entropy, action_probs
+
+    def act(self, state, buffer: Optional[PPOExperienceBuffer] = None):
+        state = torch.from_numpy(state).float().to(device)
+        action_probs = self.forward(state)
+        dist = Categorical(action_probs)
+        try:
+            action = dist.sample()
+        except Exception as e:
+            print(action_probs)
+            raise e
+
+        if buffer is not None:
+            buffer.update(
+                state,
+                action,
+                log_probs=dist.log_prob(action),
+                action_probs=action_probs,
+            )
+
+        return action.item()

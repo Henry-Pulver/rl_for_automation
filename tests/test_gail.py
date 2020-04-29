@@ -6,7 +6,7 @@ from algorithms.imitation_learning.GAIL import sample_from_buffers
 from algorithms.buffer import ExperienceBuffer, DemonstrationBuffer
 
 
-class PlotterTests(unittest.TestCase):
+class GAILTests(unittest.TestCase):
     @staticmethod
     def test_sample_from_buffers():
         """Tests whether sampling function from buffers works."""
@@ -24,7 +24,7 @@ class PlotterTests(unittest.TestCase):
         demo_buffer = DemonstrationBuffer(
             mountain_car_demo_path, state_dim, action_space_size
         )
-        demo_buffer.load_demos(demo_num)
+        demo_buffer.load_demo(demo_num)
         for experience in experiences:
             exp_buffer.update(
                 state=experience[:2], action=np.where(experience[2:] == 1)[0][0]

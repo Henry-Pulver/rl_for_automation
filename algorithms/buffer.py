@@ -99,20 +99,22 @@ class ExperienceBuffer:
         return np.array(self.rewards)
 
     def to_numpy(self) -> None:
-        self.states = np.array(self.states).reshape((-1, *self.state_dimension))
-        self.actions = np.array(self.actions).astype(np.uint8)
-        self.rewards = np.array(self.rewards) if self.rewards is not None else None
-        self.action_probs = (
-            np.array(self.action_probs) if self.action_probs is not None else None
-        )
+        if not type(self.states) == np.ndarray:
+            self.states = np.array(self.states).reshape((-1, *self.state_dimension))
+            self.actions = np.array(self.actions).astype(np.uint8)
+            self.rewards = np.array(self.rewards) if self.rewards is not None else None
+            self.action_probs = (
+                np.array(self.action_probs) if self.action_probs is not None else None
+            )
 
     def from_numpy(self) -> None:
-        self.states = list(self.states)
-        self.actions = list(self.actions)
-        self.rewards = list(self.rewards) if self.rewards is not None else None
-        self.action_probs = (
-            list(self.action_probs) if self.action_probs is not None else None
-        )
+        if type(self.states) == np.ndarray:
+            self.states = list(self.states)
+            self.actions = list(self.actions)
+            self.rewards = list(self.rewards) if self.rewards is not None else None
+            self.action_probs = (
+                list(self.action_probs) if self.action_probs is not None else None
+            )
 
 
 class PPOExperienceBuffer(ExperienceBuffer):
@@ -157,6 +159,20 @@ class PPOExperienceBuffer(ExperienceBuffer):
         )
 
 
+class GAILExperienceBuffer(PPOExperienceBuffer):
+    def __init__(
+        self,
+        state_dimension: Tuple[int],
+        action_space_size: int,
+        max_memory_size: Optional[int] = None,
+    ):
+        super(GAILExperienceBuffer, self).__init__(
+            state_dimension, action_space_size, max_memory_size
+        )
+        self.discrim_labels = []
+        self.state_actions = []
+
+
 class DemonstrationBuffer(ExperienceBuffer):
     """
     Class that samples, loads and saves demonstrations.
@@ -187,7 +203,7 @@ class DemonstrationBuffer(ExperienceBuffer):
         # Back to lists for other purposes
         self.from_numpy()
 
-    def load_demos(self, demo_number: int) -> None:
+    def load_demo(self, demo_number: int) -> None:
         """Loads expert demonstrations data for training."""
         self.actions += list(np.load(f"{self.save_path}/{demo_number}/actions.npy"))
         self.states += list(np.load(f"{self.save_path}/{demo_number}/states.npy"))
@@ -195,6 +211,15 @@ class DemonstrationBuffer(ExperienceBuffer):
             self.rewards += list(np.load(f"{self.save_path}/{demo_number}/rewards.npy"))
         except Exception:
             pass
+
+    def recall_expert_data(self, num_samples: int):
+        states = np.array(self.states[:num_samples]).reshape(
+            (-1, *self.state_dimension)
+        )
+        actions = np.array(self.actions[:num_samples])
+        del self.states[:num_samples]
+        del self.actions[:num_samples]
+        return states, actions
 
 
 class PlayBuffer(DemonstrationBuffer):

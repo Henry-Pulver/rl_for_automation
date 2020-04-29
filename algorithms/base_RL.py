@@ -1,13 +1,10 @@
-import os
 import numpy as np
 import gym
 import torch
 from pathlib import Path
 from collections import namedtuple
-import logging
-import tqdm
 
-from typing import Optional, Tuple
+from typing import Tuple
 from algorithms.buffer import ExperienceBuffer
 from algorithms.discrete_policy import DiscretePolicy
 from algorithms.utils import prod

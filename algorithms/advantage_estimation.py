@@ -20,7 +20,7 @@ def get_td_error(values: np.array, buffer, gamma: float):
     if not values.shape == rewards.shape:
         print(f"values.shape: {values.shape}")
         print(f"values: {values}")
-        print(f"rewards.shape: {buffer.rewards.shape}")
+        print(f"rewards.shape: {rewards.shape}")
     assert values.shape == rewards.shape
     td_errors = []
     next_value = 0

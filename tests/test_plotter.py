@@ -33,7 +33,10 @@ class PlotterTests(unittest.TestCase):
             for i in range(2):
                 plot = temp_path / test_plot_name / f"{test_plot_name}_{i+1}.npy"
                 assert plot.exists()
-                assert list(np.load(f"{plot}")) == data[max_plot_size * i: max_plot_size * (i + 1)]
+                assert (
+                    list(np.load(f"{plot}"))
+                    == data[max_plot_size * i : max_plot_size * (i + 1)]
+                )
 
             # Checking param files are created as expected
             for param_filename in self.PARAM_FILES:
@@ -44,11 +47,18 @@ class PlotterTests(unittest.TestCase):
             for layer_num in range(num_layers_total):
                 layer_type = "shared" if layer_num < num_shared else "actor"
                 layer_type = layer_type if layer_num < len(layers) else "critic"
-                layer_num = int(2 * layer_num) if layer_num < num_shared else int(2 * (layer_num - num_shared))
-                layer_num = layer_num if layer_num < len(layers) else int(2 * (layer_num - len(layers)))
+                layer_num = (
+                    int(2 * layer_num)
+                    if layer_num < num_shared
+                    else int(2 * (layer_num - num_shared))
+                )
+                layer_num = (
+                    layer_num
+                    if layer_num < len(layers)
+                    else int(2 * (layer_num - len(layers)))
+                )
                 layer_name = f"{layer_type}_layers.{layer_num}.weight"
                 assert (temp_path / layer_name / f"{layer_name}_1.npy").exists()
 
             # Check count worked as expected
             assert np.load(f"{temp_path}/{test_count_name}.npy") == np.sum(data)
-

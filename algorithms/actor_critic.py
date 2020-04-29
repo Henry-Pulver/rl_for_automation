@@ -6,13 +6,12 @@ from collections import namedtuple
 from typing import Tuple
 
 from discrete_policy import DiscretePolicy, DiscretePolicyParams
-from buffer import PPOExperienceBuffer
 from utils import get_activation
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-param_names = (
+ac_params = (
     "actor_layers",
     "critic_layers",
     "actor_activation",
@@ -21,11 +20,11 @@ param_names = (
 )
 try:
     ActorCriticParams = namedtuple(
-        "ActorCriticParams", param_names, defaults=(None,) * len(param_names),
+        "ActorCriticParams", ac_params, defaults=(None,) * len(ac_params),
     )
 except TypeError:
-    ActorCriticParams = namedtuple("ActorCriticParams", param_names)
-    ActorCriticParams.__new__.__defaults__ = (None,) * len(param_names)
+    ActorCriticParams = namedtuple("ActorCriticParams", ac_params)
+    ActorCriticParams.__new__.__defaults__ = (None,) * len(ac_params)
 """
     actor_layers: Tuple of actor layer sizes. 
     critic_layers: Tuple of critic layer sizes.
@@ -85,15 +84,3 @@ class ActorCritic(DiscretePolicy):
         dist_entropy = dist.entropy()
 
         return action_logprobs, torch.squeeze(state_value), dist_entropy, action_probs
-
-    def act(self, state, buffer: PPOExperienceBuffer):
-        state = torch.from_numpy(state).float().to(device)
-        action_probs = self.forward(state)
-        dist = Categorical(action_probs)
-        action = dist.sample()
-
-        buffer.update(
-            state, action, log_probs=dist.log_prob(action), action_probs=action_probs
-        )
-
-        return action.item()

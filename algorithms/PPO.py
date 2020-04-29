@@ -1,17 +1,18 @@
 import numpy as np
+import gym
 import torch
 import torch.nn as nn
-import datetime
-
 from torch.functional import F
-import gym
+from shutil import rmtree
 from collections import namedtuple
-
-from typing import Tuple, List, Optional
+from copy import deepcopy
 from pathlib import Path
+from typing import Tuple, List, Optional
 
 from action_chooser import ActionChooser
 from actor_critic import ActorCritic, ActorCriticParams
+from discrete_policy import DiscretePolicy
+from discriminator import DiscrimParams
 from advantage_estimation import get_td_error, get_gae
 from buffer import PPOExperienceBuffer
 from plotter import Plotter
@@ -25,6 +26,7 @@ hyp_names = (
     "T",
     "num_epochs",
     "learning_rate",
+    "entropy",
     "c1",
     "c2",
     "lamda",
@@ -44,7 +46,8 @@ except TypeError:
     T: Time horizon.
     num_epochs: Number of epochs of learning carried out on each T timesteps.
     learning_rate: Learning rate of Adam optimizer on Actor and Critic.
-    c1: Value function loss weighting factor.
+    entropy: Bool determining whether or not to use entropy.
+    c1: (Optional) Value function loss weighting factor.
     c2: (Optional) Entropy bonus loss term weighting factor.
     lamda: (Optional) GAE weighting factor.
     epsilon: (Optional) PPO clipping parameter.
@@ -63,13 +66,16 @@ class PPO:
         action_space: int,
         save_path: Path,
         hyperparameters: HyperparametersPPO,
-        actor_critic_params: ActorCriticParams,
+        policy_params: namedtuple,
         param_plot_num: int,
         ppo_type: str = "clip",
         advantage_type: str = "monte_carlo_baseline",
         policy_burn_in: int = 0,
-        neural_net_save: str = "PPO_actor_critic.pth",
+        neural_net_save: str = "PPO_actor_critic",
         max_plot_size: int = 10000,
+        discrim_params: Optional[DiscrimParams] = None,
+        verbose: bool = False,
+        additional_plots: Optional[List] = None,
     ):
         assert ppo_type in self.PPO_TYPES
         assert advantage_type in self.ADVANTAGE_TYPES
@@ -80,42 +86,45 @@ class PPO:
             self.beta = self.hyp.beta
         if self.adv_type == "gae":
             assert self.hyp.lamda is not None
-        self.param_sharing = actor_critic_params.num_shared_layers is not None
+        assert self.hyp.entropy is not None
 
         self.policy_burn_in = policy_burn_in
-        self.lr = self.hyp.learning_rate
-        self.gamma = self.hyp.gamma
-        self.eps_clip = self.hyp.epsilon
-        self.K_epochs = self.hyp.num_epochs
+        self.using_value = type(policy_params) == ActorCriticParams
 
-        plots = [
+        additional_plots = [] if additional_plots is None else additional_plots
+        plots = additional_plots + [
             ("mean_entropy_loss", np.float64),
             ("mean_clipped_loss", np.ndarray),
-            ("mean_value_loss", np.ndarray),
             ("rewards", float),
         ]
+        plots = plots + [("mean_value_loss", np.ndarray)] if self.using_value else plots
         counts = [("num_steps_taken", int), ("episode_num", int)]
         self.plotter = Plotter(
-            actor_critic_params,
+            policy_params,
             save_path,
             plots,
             counts,
             max_plot_size,
             param_plot_num,
             state_dimension,
+            action_space,
+            discrim_params,
+            verbose,
         )
 
-        self.neural_net_save = save_path / neural_net_save
+        self.neural_net_save = save_path / f"{neural_net_save}.pth"
 
-        self.policy = ActorCritic(
-            state_dimension, action_space, actor_critic_params,
-        ).to(device)
+        Policy = ActorCritic if self.using_value else DiscretePolicy
+
+        self.policy = Policy(state_dimension, action_space, policy_params,).to(device)
         if self.neural_net_save.exists():
             self._load_network()
-        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.lr,)
-        self.policy_old = ActorCritic(
-            state_dimension, action_space, actor_critic_params,
-        ).to(device)
+        self.optimizer = torch.optim.Adam(
+            self.policy.parameters(), lr=self.hyp.learning_rate
+        )
+        self.policy_old = Policy(state_dimension, action_space, policy_params,).to(
+            device
+        )
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         self.MseLoss = nn.MSELoss()
@@ -129,7 +138,7 @@ class PPO:
         ):
             if is_terminal:
                 discounted_reward = 0
-            discounted_reward = reward + (self.gamma * discounted_reward)
+            discounted_reward = reward + (self.hyp.gamma * discounted_reward)
             returns.insert(0, discounted_reward)
         # Normalizing the rewards:
         returns = torch.tensor(returns).to(device)
@@ -143,9 +152,8 @@ class PPO:
         old_logprobs = torch.stack(buffer.log_probs).to(device).detach()
         old_probs = torch.stack(buffer.action_probs).to(device).detach()
 
-        # Optimize policy for K epochs:
-        for k in range(self.K_epochs):
-
+        # Optimize policy for the number of epochs hyperparam:
+        for k in range(self.hyp.num_epochs):
             loss = self.calculate_loss(
                 old_states,
                 old_actions,
@@ -178,70 +186,84 @@ class PPO:
         returns_mean,
         returns_std_dev,
     ):
-        # Evaluating old actions and values :
+        plot_data = {}
         logprobs, state_values, dist_entropy, action_probs = self.policy.evaluate(
             states, actions
         )
-
-        # Finding the ratio (pi_theta / pi_theta__old):
-        ratios = torch.exp(logprobs - old_logprobs)
-
-        # Finding Loss:
-        loss = 0
-        advantages = self.calculate_advantages(
-            norm_returns, state_values.detach(), buffer, returns_mean, returns_std_dev
-        )
-        surr1 = ratios * advantages
-        if self.ppo_type == "clip":
-            surr2 = (
-                torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
-            )
-            clipped_loss = -torch.min(surr1, surr2)
-            main_loss = clipped_loss
-        elif self.ppo_type == "fixed_KL":
-            d = F.kl_div(old_probs, action_probs)
-            main_loss = -surr1 + self.hyp.beta * d
-        elif self.ppo_type == "adaptive_KL":
-            d = F.kl_div(old_probs, action_probs)
-            if d < self.hyp.d_targ / 1.5:
-                self.beta /= 2
-            elif d > self.hyp.d_targ * 1.5:
-                self.beta *= 2
-            main_loss = -surr1 + self.beta * d
-        elif self.ppo_type == "unclipped":
-            main_loss = -surr1
-        else:
-            raise ValueError("Invalid PPO type used!")
         if update:
-            loss += main_loss
-        value_loss = self.hyp.c1 * self.MseLoss(state_values, norm_returns)
-        loss += value_loss
+            # Evaluating old actions and values :
 
-        loss -= self.hyp.c2 * dist_entropy.mean()
+            # Finding the ratio (pi_theta / pi_theta__old):
+            ratios = torch.exp(logprobs - old_logprobs)
 
-        self.plotter.record_data(
-            {
-                "mean_entropy_loss": -0.01 * dist_entropy.mean().detach().cpu().numpy(),
-                "mean_clipped_loss": main_loss.mean().detach().cpu().numpy(),
-                "mean_value_loss": value_loss.detach().cpu().numpy(),
-            }
-        )
+            # Finding Loss:
+            advantages = torch.squeeze(
+                self.calculate_advantages(
+                    norm_returns, state_values, buffer, returns_mean, returns_std_dev
+                )
+            )
+            assert ratios.size() == advantages.size()
+            surr1 = ratios * advantages
+            # print(f"ratios: {ratios.size()}")
+            # print(f"advantages: {advantages.size()}")
+            # print(f"surr1: {surr1.size()}")
+            if self.ppo_type == "clip":
+                surr2 = (
+                    torch.clamp(ratios, 1 - self.hyp.epsilon, 1 + self.hyp.epsilon)
+                    * advantages
+                )
+                clipped_loss = -torch.min(surr1, surr2)
+                main_loss = clipped_loss
+            elif self.ppo_type == "fixed_KL":
+                d = F.kl_div(old_probs, action_probs)
+                main_loss = -surr1 + self.hyp.beta * d
+            elif self.ppo_type == "adaptive_KL":
+                d = F.kl_div(old_probs, action_probs)
+                if d < self.hyp.d_targ / 1.5:
+                    self.beta /= 2
+                elif d > self.hyp.d_targ * 1.5:
+                    self.beta *= 2
+                main_loss = -surr1 + self.beta * d
+            elif self.ppo_type == "unclipped":
+                main_loss = -surr1
+            else:
+                raise ValueError("Invalid PPO type used!")
+            plot_data["mean_clipped_loss"] = deepcopy(main_loss.mean().detach().cpu().numpy())
+
+            loss = main_loss
+            if self.hyp.entropy:
+                entropy_loss = -self.hyp.c2 * dist_entropy.mean()
+                loss += entropy_loss
+                plot_data["mean_entropy_loss"] = deepcopy(np.squeeze(
+                    entropy_loss.mean().detach().cpu().numpy()
+                ))
+        else:
+            loss = torch.tensor([0], requires_grad=True, dtype=torch.float32).clone()
+
+        if self.using_value:
+            value_loss = self.hyp.c1 * self.MseLoss(state_values, norm_returns)
+            loss += value_loss
+            plot_data["mean_value_loss"] = deepcopy(value_loss.detach().cpu().numpy())
+
+        self.plotter.record_data(plot_data)
         return loss
 
     def calculate_advantages(
         self,
-        norm_returns,
-        state_values: torch.tensor,
-        buffer: PPOExperienceBuffer,
-        returns_mean: torch.Tensor,
-        returns_std_dev: torch.Tensor,
+        norm_returns: torch.tensor,
+        state_values: Optional[torch.tensor] = None,
+        buffer: Optional[PPOExperienceBuffer] = None,
+        returns_mean: Optional[torch.Tensor] = None,
+        returns_std_dev: Optional[torch.Tensor] = None,
     ):
         if self.adv_type == "monte_carlo":
             advantages = norm_returns
         elif self.adv_type == "monte_carlo_baseline":
-            advantages = norm_returns - state_values
+            advantages = norm_returns - state_values.detach()
         elif self.adv_type == "gae":
-            scaled_state_values = (state_values * returns_std_dev) + returns_mean
+            scaled_state_values = (
+                state_values.detach() * returns_std_dev
+            ) + returns_mean
             td_errors = get_td_error(
                 scaled_state_values.cpu().numpy(), buffer, self.hyp.gamma
             )
@@ -260,7 +282,9 @@ class PPO:
         names, x_params, y_params = self.plotter.get_param_plot_nums()
         sampled_params = {}
         for name, x_param, y_param in zip(names, x_params, y_params):
-            sampled_params[name] = self.policy.state_dict()[name].cpu().numpy()[x_param, y_param]
+            sampled_params[name] = (
+                self.policy.state_dict()[name].cpu().numpy()[x_param, y_param]
+            )
         self.plotter.record_data(sampled_params)
 
     def save(self):
@@ -294,6 +318,7 @@ def train_ppo(
     param_plot_num: int = 2,
     policy_burn_in: int = 0,
     chooser_params: Tuple = (None, None, None),
+    restart: bool = False,
 ):
     try:
         env = gym.make(env_name).env
@@ -319,31 +344,36 @@ def train_ppo(
                 hyp_str,
                 date,
             )
+            if restart:
+                if save_path.exists():
+                    print("Old data removed!")
+                    rmtree(save_path)
 
             ppo = PPO(
                 state_dimension=state_dim,
                 action_space=action_dim,
-                actor_critic_params=actor_critic_params,
+                policy_params=actor_critic_params,
                 hyperparameters=hyp,
                 save_path=save_path,
                 ppo_type=ppo_type,
                 advantage_type=advantage_type,
                 param_plot_num=param_plot_num,
                 policy_burn_in=policy_burn_in,
+                verbose=verbose,
             )
             if load_path is not None:
                 ppo.policy.load_state_dict(torch.load(load_path))
-                ppo.policy.eval()
 
             # logging variables
-            running_rewards = []
             avg_length = 0
             timestep = 0  # Determines when to update the network
+            running_reward = 0
             action_chooser = ActionChooser(*chooser_params)
+            ep_num_start = ppo.plotter.get_count("episode_num")
 
             # training loop
-            total_steps = 0
-            for ep_num in range(1, max_episodes + 1):  # Run episodes
+            print(f"Starting running from episode number {ep_num_start + 1}\n")
+            for ep_num in range(ep_num_start + 1, max_episodes + 1):  # Run episodes
                 state = env.reset()
                 ep_total_reward = 0
                 t = 0
@@ -376,20 +406,21 @@ def train_ppo(
                         break
 
                 avg_length += t / log_interval
-                total_steps += t
-                running_rewards.append(ep_total_reward)
-                ppo.plotter.record_data({"rewards": ep_total_reward, "num_steps_taken": t, "episode_num": 1})
+                running_reward += ep_total_reward / log_interval
+                ppo.plotter.record_data(
+                    {"rewards": ep_total_reward, "num_steps_taken": t, "episode_num": 1}
+                )
 
                 ep_str = ("{0:0" + f"{len(str(max_episodes))}" + "d}").format(ep_num)
                 if verbose:
-                    print(
-                        f"Episode {ep_str} of {max_episodes}. \t Total reward = {ep_total_reward}"
-                    )
+                    print(f"{ep_total_reward},")
+                    # print(
+                    #     f"Episode {ep_str} of {max_episodes}. \t Total reward = {ep_total_reward}"
+                    # )
 
                 if ep_num % log_interval == 0:
-                    running_reward = np.mean(running_rewards[-log_interval:])
                     print(
-                        f"Episode {ep_str} of {max_episodes}. \t Avg length: {int(avg_length)} \t Reward: {running_reward}"
+                        f"Episode {ep_str} of {max_episodes}. \t Avg length: {int(avg_length)} \t Reward: {np.round(running_reward, 1)}"
                     )
                     ppo.save()
 
@@ -397,81 +428,11 @@ def train_ppo(
                     if running_reward > solved_reward:
                         print("########## Solved! ##########")
                         break
+                    running_reward = 0
                     avg_length = 0
-            episode_numbers.append((ep_num, total_steps))
+            episode_numbers.append(ep_num)
         print(f"episode_numbers: {episode_numbers}")
         return episode_numbers
     except KeyboardInterrupt as interrupt:
         ppo.save()
         raise interrupt
-
-
-def main():
-    print("\n\nTHIS MUST BE RUN IN TERMINAL OTHERWISE IT WON'T SAVE!\n\n")
-    #### ATARI ####
-    log_interval = 20  # print avg reward in the interval
-    max_episodes = 100000  # max training episodes
-    max_timesteps = 10000  # max timesteps in one episode
-    random_seeds = list(range(0, 5))
-    ppo_types = ["clip"]
-    adv_types = ["gae"]
-    chooser_params = (100, 1, 100)
-    actor_critic_params = ActorCriticParams(
-        actor_layers=(32, 32),
-        actor_activation="tanh",
-        critic_layers=(32, 32),
-        critic_activation="tanh",
-        num_shared_layers=1,
-    )
-    hyp = HyperparametersPPO(
-        gamma=0.99,  # discount factor
-        lamda=0.95,  # GAE weighting factor
-        learning_rate=2e-3,
-        T=1024,  # update policy every n timesteps
-        epsilon=0.2,  # clip parameter for PPO
-        c1=0.5,  # value function hyperparam
-        c2=0.01,  # entropy hyperparam
-        num_epochs=3,  # update policy for K epochs
-        # d_targ=d_targ,          # adaptive KL param
-        # beta=beta,              # fixed KL param
-    )
-
-    #### OTHER STUFF ####
-    env_names = ["Acrobot-v1", "CartPole-v1", "MountainCar-v0"]
-    solved_rewards = [-80, 195, -135]  # stop training if avg_reward > solved_reward
-
-    date = datetime.date.today().strftime("%d-%m-%Y")
-
-    outcomes = []
-    try:
-        for env_name, solved_reward in zip(env_names, solved_rewards):
-            outcomes.append(env_name)
-            for adv_type in adv_types:
-                outcomes.append(adv_type)
-                outcomes.append(
-                    train_ppo(
-                        env_name=env_name,
-                        solved_reward=solved_reward,
-                        hyp=hyp,
-                        actor_critic_params=actor_critic_params,
-                        random_seeds=random_seeds,
-                        log_interval=log_interval,
-                        max_episodes=max_episodes,
-                        max_timesteps=max_timesteps,
-                        ppo_type=ppo_types[0],
-                        advantage_type=adv_type,
-                        date=date,
-                        # render=True,
-                        param_plot_num=10,
-                        # policy_burn_in=5,
-                        # chooser_params=chooser_params,
-                    )
-                )
-    finally:
-        print(f"outcomes:")
-        for outcome in outcomes:
-            print(outcome)
-
-
-if __name__ == "__main__":
-    main()
