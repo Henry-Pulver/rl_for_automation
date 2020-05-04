@@ -5,10 +5,12 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 import gym
+from collections import namedtuple
 from shutil import rmtree
 from typing import Tuple, List, Optional
 
-from algorithms.discrete_policy import DiscretePolicy, DiscretePolicyParams
+from algorithms.actor_critic import ActorCritic, ActorCriticParams
+from algorithms.discrete_policy import DiscretePolicy
 from algorithms.buffer import DemonstrationBuffer
 from algorithms.plotter import Plotter
 from algorithms.utils import generate_save_location
@@ -27,17 +29,18 @@ class BCTrainer:
         learning_rate: float,
         state_space_size: Tuple,
         action_space_size: int,
-        discrete_policy_params: DiscretePolicyParams,
+        params: namedtuple,
         param_plot_num: int,
         max_plot_size: int = 10000,
     ):
         self.state_space_size = state_space_size
         self.action_space_size = action_space_size
-        self.policy = DiscretePolicy(
+        net_type = ActorCritic if type(params) == ActorCriticParams else DiscretePolicy
+        self.policy = net_type(
             state_dimension=state_space_size,
             action_space=action_space_size,
-            params=discrete_policy_params,
-        ).float()
+            params=params,
+        ).float().to(device)
 
         self.demo_buffer = DemonstrationBuffer(
             demo_path, state_space_size, action_space_size
@@ -51,7 +54,7 @@ class BCTrainer:
         ]
         counts = [("num_steps", int)]
         self.plotter = Plotter(
-            network_params=discrete_policy_params,
+            network_params=params,
             save_path=save_path,
             counts=counts,
             plots=plots,
@@ -62,7 +65,7 @@ class BCTrainer:
         )
         self.save_path = save_path
 
-        self.loss_fn = nn.CrossEntropyLoss(reduction="mean")
+        self.loss_fn = nn.NLLLoss(reduction="mean")
 
         # zero the parameter gradients
         self.optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate)
@@ -107,11 +110,10 @@ class BCTrainer:
                 states = torch.from_numpy(sampled_states).to(device)
                 actions = torch.from_numpy(sampled_actions).to(device)
                 # forward + backward + optimize
-                action_probs = self.policy(states.float())
-                action_probs = action_probs.float()
+                action_logprobs = torch.log(self.policy(states.float()).float().to(device))
                 actions = actions.type(torch.long)
 
-                loss = self.loss_fn(action_probs, actions)
+                loss = self.loss_fn(action_logprobs, actions)
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
@@ -129,17 +131,6 @@ class BCTrainer:
             self.plotter.save_plots()
             self.epochs_trained += 1
             print(f"Epoch number: {self.epochs_trained}\tAvg loss: {avg_loss}")
-            # avg_loss_plot.append(avg_loss)
-            # if len(avg_loss_plot) > 10:
-            #     if (
-            #         abs(avg_loss - avg_loss_plot[0]) < 1e-9
-            #         and abs(avg_loss - avg_loss_plot[-3]) < 1e-9
-            #         and abs(avg_loss - avg_loss_plot[-1]) < 1e-9
-            #     ):
-            #         print(
-            #             f"\n\nAvg loss hasn't changed for 10 iterations.\n Skipping to next seed.\n"
-            #         )
-            #         break
         self._save_network()
 
     def _record_nn_params(self):
@@ -157,7 +148,7 @@ class BCTrainer:
         torch.save(self.policy.state_dict(), f"{neural_net_save}")
 
 
-def train_network(
+def train_behavioural_cloning(
     env_name: str,
     num_demos: int,
     minibatch_size: int,
@@ -166,11 +157,12 @@ def train_network(
     demo_path: Path,
     learning_rate: float,
     random_seeds: List,
-    discrete_policy_params: DiscretePolicyParams,
+    params: namedtuple,
     param_plot_num: int,
     num_test_trials: int,
     restart: bool,
     date: Optional[str] = None,
+    chooser_params: Tuple = (None, None, None),
 ):
     env = gym.make(env_name).env
     state_dim = env.observation_space.shape
@@ -188,7 +180,7 @@ def train_network(
         hyp_str = f"demos-{num_demos}"
         save_location = generate_save_location(
             Path("data"),
-            discrete_policy_params.actor_layers,
+            params.actor_layers,
             f"BC",
             env_name,
             random_seed,
@@ -206,7 +198,7 @@ def train_network(
             learning_rate=learning_rate,
             action_space_size=action_dim,
             state_space_size=state_dim,
-            discrete_policy_params=discrete_policy_params,
+            params=params,
             param_plot_num=param_plot_num,
         )
 
@@ -226,7 +218,8 @@ def train_network(
                     episode_timeout=1998,
                     show_solution=False,
                     num_trials=num_test_trials,
-                    params=discrete_policy_params,
+                    params=params,
+                    chooser_params=chooser_params,
                 )
                 trainer.plotter.record_data({"avg_score": mean_score})
                 prev_num_epochs += num_epochs_to_train

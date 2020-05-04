@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 
 
 class ActionChooser:
@@ -7,14 +7,17 @@ class ActionChooser:
         action_change_freq: Optional[int],
         action_choice: Optional[int],
         increase_freq: int,
+        action_space: Optional[List] = None,
     ):
         self.timestep = 0
         self.reset_count = 0
         self.action_change_freq = action_change_freq
         self.action_choice = action_choice
         self.increase_freq = increase_freq
+        self.action_space = action_space
 
     def step(self, action):
+        action = self.action_space[action] if self.action_space is not None else action
         if self.action_change_freq is not None:
             if action == self.action_choice:
                 self.timestep = 0

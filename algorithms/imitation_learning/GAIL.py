@@ -21,7 +21,6 @@ hyp_names = (
     "num_discrim_epochs",
     "learning_rate",
     "discrim_lr",
-    "entropy",
     "num_demos",
     "success_margin",
     "fraction_expert",
@@ -48,12 +47,11 @@ except TypeError:
     num_discrim_epochs: Number of epochs of learning carried out by the discriminator. 
     learning_rate: Learning rate of Adam optimizer on Actor and Critic.
     discrim_lr: Discriminator learning rate for Adam optimizer.
-    entropy: Bool determining whether or not to use entropy.
     num_demos: Number of demonstrations used.
     success_margin: Percentage of avg expert return within which success is achieved. 
     fraction_expert: Fraction of the discriminator update data that is from the expert.
     c1: (Optional) Value function loss weighting factor.
-    c2: (Optional) Entropy bonus loss term weighting factor.
+    c2: Entropy bonus loss term weighting factor. Set to 0 for no entropy component.
     lamda: (Optional) GAE weighting factor.
     epsilon: (Optional) PPO clipping parameter.
     beta: (Optional) KL penalty parameter.
@@ -79,7 +77,7 @@ def sample_from_buffers(
     learner_action_vectors = torch.zeros((learner_actions.shape[0], action_space))
     learner_action_vectors[
         torch.arange(learner_actions.shape[0]), learner_actions
-    ] = 256
+    ] = 1
     learner_tuples = torch.cat((learner_states, learner_action_vectors), dim=1)
 
     num_expert_samples = int(
@@ -101,7 +99,7 @@ def sample_from_buffers(
     expert_states = torch.from_numpy(expert_states).type(dtype=torch.float32).to(device)
     expert_actions = torch.from_numpy(expert_actions).type(dtype=torch.int64).to(device)
     expert_action_vectors = torch.zeros((expert_actions.shape[0], action_space))
-    expert_action_vectors[torch.arange(expert_actions.shape[0]), expert_actions] = 256
+    expert_action_vectors[torch.arange(expert_actions.shape[0]), expert_actions] = 1
     expert_tuples = torch.cat((expert_states, expert_action_vectors), dim=1)
 
     data_set = torch.cat((learner_tuples, expert_tuples), dim=0)
@@ -159,7 +157,7 @@ class GAILTrainer(PPO):
         )
         self.num_learner_samples = None
 
-        self.KL_loss = torch.nn.KLDivLoss()
+        self.discrim_loss = torch.nn.NLLLoss()
 
     def update(self, buffer: GAILExperienceBuffer, ep_num: int):
         # Update discriminator
@@ -167,58 +165,71 @@ class GAILTrainer(PPO):
         if self.num_learner_samples is None:
             self.num_learner_samples = buffer.get_length()
         for epoch in range(self.hyp.num_discrim_epochs):
-            discrim_probs = self.discriminator(state_actions).to(device)
-            # learner_loss = torch.log(torch.clamp(discrim_probs[:self.num_learner_samples], 0.01, 1)).mean()
+            # print(f"state actions: {state_actions}")
+            discrim_logprobs = self.discriminator.logprobs(state_actions).to(device)
+            # learner_loss = torch.log(torch.clamp(discrim_logprobs[:self.num_learner_samples], 0.01, 1)).mean()
             # print(buffer.discrim_labels[:self.num_learner_samples])
             # print(buffer.discrim_labels[self.num_learner_samples:])
-            discrim_vector = torch.cat(
-                (
-                    torch.unsqueeze(1 - discrim_probs, dim=1),
-                    torch.unsqueeze(discrim_probs, dim=1),
-                ),
-                dim=-1,
-            )
-            # print(f"discrim labels: {buffer.discrim_labels}")
-            labels = torch.eye(2)[buffer.discrim_labels.type(torch.long)]
-            learner_loss = self.KL_loss(
-                input=discrim_vector[: self.num_learner_samples],
-                target=labels[: self.num_learner_samples],
-            )
-            expert_loss = self.KL_loss(
-                input=discrim_vector[self.num_learner_samples :],
-                target=labels[self.num_learner_samples :],
-            )
-            # expert_loss = torch.log(torch.clamp(1 - discrim_probs[self.num_learner_samples:], 0.01, 1)).mean()
-            loss = expert_loss + learner_loss
-            print(f"Learner loss: \t{learner_loss}")
-            print(f"Expert loss: \t{expert_loss}")
 
-            # loss = self.KL_loss(discrim_probs, buffer.discrim_labels)
-            print(
-                f"Learner labels 0: \t{discrim_probs[:self.num_learner_samples].mean()}"
+            # discrim_vector = torch.cat(
+            #     (
+            #         torch.unsqueeze(1 - discrim_logprobs, dim=1),
+            #         torch.unsqueeze(discrim_logprobs, dim=1),
+            #     ),
+            #     dim=-1,
+            # )
+
+            # print(f"discrim labels: {buffer.discrim_labels}")
+            # print(f"discrim probs: {discrim_logprobs[: self.num_learner_samples]}")
+            # print(f"discrim probs size: {discrim_logprobs[: self.num_learner_samples].size()}")
+
+            # labels = torch.eye(2)[buffer.discrim_labels.type(torch.long)]
+
+            # print(f"labels: {labels[: self.num_learner_samples]}")
+            # learner_loss = self.discrim_loss(
+            #     input=discrim_logprobs[: self.num_learner_samples],
+            #     target=buffer.discrim_labels.type(torch.long)[: self.num_learner_samples],
+            # )
+            # expert_loss = self.discrim_loss(
+            #     input=discrim_logprobs[self.num_learner_samples :],
+            #     target=buffer.discrim_labels.type(torch.long)[self.num_learner_samples :],
+            # )
+            # print(f"Learner loss: \t{learner_loss}")
+            # print(f"Expert loss: \t{expert_loss}")
+
+            # expert_loss = torch.log(torch.clamp(1 - discrim_logprobs[self.num_learner_samples:], 0.01, 1)).mean()
+            # loss = expert_loss + learner_loss
+
+            loss = self.discrim_loss(
+                input=discrim_logprobs,
+                target=buffer.discrim_labels.type(torch.long),
             )
-            print(
-                f"Expert labels 1: \t{discrim_probs[self.num_learner_samples:].mean()}"
-            )
-            # print(f"Learner data -\t label: {0}\t discrim prob: {discrim_probs[:1024].mean()}")
-            # print(f"Learner data -\t label: {0}\t discrim prob: {discrim_probs[:1024].size()}")
-            # print(f"Learner data -\t label: {0}\t discrim prob: {discrim_probs[:1024]}")
-            # print(f"Expert data -\t label: {1}\t discrim prob: {discrim_probs[1024:].mean()}")
-            # print(f"Expert data -\t label: {1}\t discrim prob: {discrim_probs[1024:].size()}")
-            # print(f"Expert data -\t label: {1}\t discrim prob: {discrim_probs[1024:]}")
+
+            # loss = self.KL_loss(discrim_logprobs, buffer.discrim_labels)
+            # print(f"Learner labels: {buffer.discrim_labels[:self.num_learner_samples]}")
             plotted_loss = loss.detach().cpu().numpy()
             self.plotter.record_data({"discrim_loss": plotted_loss})
             # print(f"Plotted loss = {plotted_loss}")
+            # print(f"learner: {torch.exp(discrim_logprobs[:self.num_learner_samples]).t()[0].mean()}")
+            # print(f"expert: {torch.exp(discrim_logprobs[self.num_learner_samples:]).t()[1].mean()}")
+            if self.verbose:
+                print(
+                    f"Learner labels {buffer.discrim_labels[:self.num_learner_samples].mean()}: \t{torch.exp(discrim_logprobs[:self.num_learner_samples]).t()[1].mean()}"
+                )
+                print(
+                    f"Expert labels {buffer.discrim_labels[self.num_learner_samples:].mean()}: \t\t{torch.exp(discrim_logprobs[self.num_learner_samples:]).t()[1].mean()}"
+                )
             self.discrim_optim.zero_grad()
-            loss.mean().backward()
+            loss.backward()
             self.discrim_optim.step()
+            self.record_nn_params()
 
         # Update policy
         num_learner_steps = buffer.get_length()
         buffer.rewards = list(
             np.squeeze(
                 torch.log(
-                    self.discriminator(state_actions[:num_learner_steps])
+                    self.discriminator.prob_expert(state_actions[:num_learner_steps])
                 )  # Take log of discrim
                 .detach()
                 .cpu()
@@ -226,9 +237,10 @@ class GAILTrainer(PPO):
             )
         )
         # print(f"Expert data -\t label: {1}\t discrim prob: {np.mean(buffer.rewards)}")
-        print(
-            "------------------------------------------------------------------------"
-        )
+        if self.verbose:
+            print(
+                "------------------------------------------------------------------------"
+            )
         super(GAILTrainer, self).update(buffer, ep_num)
 
     def record_nn_params(self):
@@ -259,7 +271,7 @@ class GAILTrainer(PPO):
 def train_gail(
     demo_path: Path,
     env_name: str,
-    policy_params: DiscretePolicyParams,
+    policy_params: namedtuple,
     discrim_params: DiscrimParams,
     max_episodes: int,
     log_interval: int,
@@ -408,6 +420,69 @@ def train_gail(
         gail.save()
         raise interrupt
 
+# torch.manual_seed(12)
+# discrim_params = DiscrimParams(hidden_layers=(32, 32), activation="tanh",)
+# discriminator = Discriminator(
+#     (2, ), 2, discrim_params,
+# ).float().to(device)
+#
+# discrim_optim = torch.optim.Adam(
+#     discriminator.parameters(), lr=4e-2
+# )
+# discrim_loss = torch.nn.NLLLoss()
+# learn_states = torch.tensor([[0, 0, 1, 0],[0, 1, 1, 0],[1, 0, 0, 1],[1, 1, 0, 1]], dtype=torch.float)
+# exp_states = torch.tensor([[0, 0, 1, 0],[0, 1, 0, 1],[1, 0, 0, 1],[1, 1, 1, 0]], dtype=torch.float)
+#
+# learn_labels = torch.tensor([0, 0, 0, 0])
+# exp_labels = torch.tensor([1, 1, 1, 1])
+#
+# for n in range(25):
+#     discrim_logprobs_learn = discriminator.logprobs(learn_states)
+#     discrim_logprobs_expert = discriminator.logprobs(exp_states)
+#
+#     learner_loss = discrim_loss(
+#         input=discrim_logprobs_learn,
+#         target=learn_labels,
+#     )
+#     print(f"learner_loss: {learner_loss}")
+#     expert_loss = discrim_loss(
+#         input=discrim_logprobs_expert,
+#         target=exp_labels,
+#     )
+#     print(f"expert_loss: {expert_loss}")
+#     # loss = discrim_loss(
+#     #     input=discrim_logprobs,
+#     #     target=discrim_labels,
+#     # )
+#     # print(loss)
+#     loss = (expert_loss + learner_loss) / 2
+#     discrim_optim.zero_grad()
+#     loss.backward()
+#     discrim_optim.step()
+# discrim_logprobs_learn = discriminator(learn_states)
+# discrim_logprobs_expert = discriminator(exp_states)
+# print(f"discrim_logprobs_learn: {discrim_logprobs_learn}")
+# print(f"discrim_logprobs_expert: {discrim_logprobs_expert}")
+
+# probs = torch.tensor([[0.12, 0.88],[0.12, 0.88],[0.9, 0.49],[0.9, 0.49]])
+    # discrim_logprobs = torch.log(probs)
+    # learner_loss = discrim_loss(
+    #     input=discrim_logprobs[:2],
+    #     target=discrim_labels[:2],
+    # )
+    # print(learner_loss)
+    # expert_loss = discrim_loss(
+    #     input=discrim_logprobs[2:],
+    #     target=discrim_labels[2:],
+    # )
+    # print(expert_loss)
+    # loss = discrim_loss(
+    #     input=discrim_logprobs,
+    #     target=discrim_labels,
+    # )
+    # print(loss)
+name = "discriminasdoign"
+print(name[:7] == "discrim")
 
 # num_samples = 4
 # n = np.append(np.zeros(num_samples), np.ones(num_samples))

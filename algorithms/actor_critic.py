@@ -59,7 +59,7 @@ class ActorCritic(DiscretePolicy):
         )
 
         critic_layers = (
-            (params.critic_layers[params.num_shared_layers],)
+            params.critic_layers[params.num_shared_layers:]
             if self.param_sharing
             else params.critic_layers
         )

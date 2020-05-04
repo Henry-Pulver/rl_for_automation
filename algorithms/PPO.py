@@ -26,7 +26,6 @@ hyp_names = (
     "T",
     "num_epochs",
     "learning_rate",
-    "entropy",
     "c1",
     "c2",
     "lamda",
@@ -46,9 +45,8 @@ except TypeError:
     T: Time horizon.
     num_epochs: Number of epochs of learning carried out on each T timesteps.
     learning_rate: Learning rate of Adam optimizer on Actor and Critic.
-    entropy: Bool determining whether or not to use entropy.
     c1: (Optional) Value function loss weighting factor.
-    c2: (Optional) Entropy bonus loss term weighting factor.
+    c2: Entropy bonus loss term weighting factor. Set to 0 for no entropy component.
     lamda: (Optional) GAE weighting factor.
     epsilon: (Optional) PPO clipping parameter.
     beta: (Optional) KL penalty parameter.
@@ -86,17 +84,17 @@ class PPO:
             self.beta = self.hyp.beta
         if self.adv_type == "gae":
             assert self.hyp.lamda is not None
-        assert self.hyp.entropy is not None
+        self.verbose = verbose
 
         self.policy_burn_in = policy_burn_in
         self.using_value = type(policy_params) == ActorCriticParams
 
         additional_plots = [] if additional_plots is None else additional_plots
         plots = additional_plots + [
-            ("mean_entropy_loss", np.float64),
             ("mean_clipped_loss", np.ndarray),
             ("rewards", float),
         ]
+        plots = plots + [("mean_entropy_loss", np.float64)] if self.hyp.c2 != 0 else plots
         plots = plots + [("mean_value_loss", np.ndarray)] if self.using_value else plots
         counts = [("num_steps_taken", int), ("episode_num", int)]
         self.plotter = Plotter(
@@ -187,12 +185,11 @@ class PPO:
         returns_std_dev,
     ):
         plot_data = {}
+        # Evaluating old actions and values :
         logprobs, state_values, dist_entropy, action_probs = self.policy.evaluate(
             states, actions
         )
         if update:
-            # Evaluating old actions and values :
-
             # Finding the ratio (pi_theta / pi_theta__old):
             ratios = torch.exp(logprobs - old_logprobs)
 
@@ -204,9 +201,6 @@ class PPO:
             )
             assert ratios.size() == advantages.size()
             surr1 = ratios * advantages
-            # print(f"ratios: {ratios.size()}")
-            # print(f"advantages: {advantages.size()}")
-            # print(f"surr1: {surr1.size()}")
             if self.ppo_type == "clip":
                 surr2 = (
                     torch.clamp(ratios, 1 - self.hyp.epsilon, 1 + self.hyp.epsilon)
@@ -231,7 +225,7 @@ class PPO:
             plot_data["mean_clipped_loss"] = deepcopy(main_loss.mean().detach().cpu().numpy())
 
             loss = main_loss
-            if self.hyp.entropy:
+            if self.hyp.c2 != 0:
                 entropy_loss = -self.hyp.c2 * dist_entropy.mean()
                 loss += entropy_loss
                 plot_data["mean_entropy_loss"] = deepcopy(np.squeeze(
@@ -319,11 +313,12 @@ def train_ppo(
     policy_burn_in: int = 0,
     chooser_params: Tuple = (None, None, None),
     restart: bool = False,
+    action_space: Optional[List] = None,
 ):
     try:
         env = gym.make(env_name).env
         state_dim = env.observation_space.shape
-        action_dim = env.action_space.n
+        action_dim = env.action_space.n if action_space is None else len(action_space)
 
         episode_numbers = []
         for random_seed in random_seeds:
@@ -368,7 +363,7 @@ def train_ppo(
             avg_length = 0
             timestep = 0  # Determines when to update the network
             running_reward = 0
-            action_chooser = ActionChooser(*chooser_params)
+            action_chooser = ActionChooser(*chooser_params, action_space)
             ep_num_start = ppo.plotter.get_count("episode_num")
 
             # training loop

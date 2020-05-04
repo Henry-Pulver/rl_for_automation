@@ -16,7 +16,7 @@ GAME_STRINGS_PLAY = [
     "SpaceInvaders-ramNoFrameskip-v4",
     "BeamRider-ramNoFrameskip-v4",
 ]
-GAME_STRINGS_LEARN = [  # So for learning we're reduced the number of frames by
+GAME_STRINGS_LEARN = [  # So for learning we're reduced the number of frames by 4
     "Breakout-ram-v4",
     "MsPacman-ram-v4",
     "Pong-ram-v4",

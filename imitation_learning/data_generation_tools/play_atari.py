@@ -20,17 +20,15 @@ def generate_expert_data(game_ref: int, fps: int, num_demos: int, demo_start: in
 
 
 def main():
-    game_ref = 1
-    num_demos = 1
+    game_ref = 4
+    num_demos = 10
     fps = 60
-    demo_start = 0
+    demo_start = 3
     generate_expert_data(game_ref, fps, num_demos, demo_start)
 
 
 if __name__ == "__main__":
     # main()
-    import numpy as np
-
-    rewards = np.load(f"../expert_demos/{GAME_STRINGS_LEARN[1]}/0/rewards.npy")
-    print(np.max(rewards))
-    print(np.sum(rewards))
+    game_ref = 4
+    env = gym.make(GAME_STRINGS_PLAY[game_ref])
+    print(env.unwrapped.get_action_meanings())

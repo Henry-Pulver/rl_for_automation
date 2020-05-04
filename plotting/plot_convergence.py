@@ -34,14 +34,15 @@ def plot_data(
     plot_name: str,
     load_path: Path,
     reward_smoothing_weight: Optional[float] = None,
-    min_score: Optional[float] = None,
     graph_labels: Optional[Dict] = None,
+    plot_smoothed: bool = False,
 ):
     graph_labels = (
         {"Title": "", "x": "", "y": "", "Legend": [""]}
         if graph_labels is None
         else graph_labels
     )
+
     fig = go.Figure()
     x = np.linspace(0, plot.shape[-1], plot.shape[-1] + 1)
 
@@ -62,24 +63,23 @@ def plot_data(
     fig.write_html(
         f"{load_path}/{plot_name}.html", auto_open=True,
     )
-    if load_path.stem == "rewards":
+    if plot_smoothed:
         fig2 = go.Figure()
-        plot_smoothed = smooth_rewards(plot, reward_smoothing_weight, min_score)
-        fig2.add_trace(go.Scatter(x=x, y=plot_smoothed))
+        smoothed_plot = smooth_rewards(plot, reward_smoothing_weight)
+        fig2.add_trace(go.Scatter(x=x, y=smoothed_plot))
         fig2.update_layout(
             title=graph_labels["Title"],
             xaxis_title=graph_labels["x"],
             yaxis_title=graph_labels["y"],
         )
         fig2.write_html(
-            f"{load_path}/smoothed_rewards.html", auto_open=True,
+            f"{load_path}/{plot_name}_smoothed.html", auto_open=True,
         )
 
 
 def output_plots_and_counts(
     load_path: Path,
     reward_smoothing_weight: float,
-    min_score: float,
     plots_to_plot: Optional[List] = None,
     graph_labels: Optional[Dict] = None,
 ):
@@ -101,8 +101,8 @@ def output_plots_and_counts(
                 entry.stem,
                 entry,
                 reward_smoothing_weight,
-                min_score,
                 graph_labels,
+                entry.stem == "rewards" or entry.stem[-4:] == "loss",
             )
 
 
@@ -211,11 +211,11 @@ def plot_demo_num_avgs(
 
 
 def smooth_rewards(
-    rewards: np.ndarray, smoothing_weight: float, min_score: float
+    rewards: np.ndarray, smoothing_weight: float
 ) -> np.ndarray:
     assert 0 < smoothing_weight < 1
     smoothed_rewards = np.zeros(rewards.shape)
-    prev_reward = min_score
+    prev_reward = rewards[0]
     for count, reward in enumerate(rewards):
         smoothed_rewards[count] = (
             smoothing_weight * prev_reward + (1 - smoothing_weight) * reward
@@ -404,46 +404,49 @@ def main():
     # load_path = Path(
     #     "../imitation_learning/data/BC/CartPole-v1/23-04-2020/hyp-demos-100/32-32/seed-0/epoch_loss/epoch_loss_1.npy"
     # )
-    hyps = [0, 0.2]
-    for hyp in hyps:
-        base_path = Path(
-            f"../reinforcement_learning/data/PPO-clip/CartPole-v1/28-04-2020/hyp-{hyp}/32-32/seed-0/"
-        )
-        # param_name = "actor_layers.0.weight"
-        # actor_params = np.load(base_path/param_name/ f"{param_name}_1.npy")
-        # print(actor_params.shape)
-
-        graph_labels = {
-            "Title": f"Atari Ms Pacman clipped PPO smoothed rewards, clipping parameter: {hyp}",
-            # "x": "",
-            "x": "Episode number",
-            # "y": "",
-            "y": "Score",
-            "Legend": [""]
-        }
-        load_path = base_path
-        output_plots_and_counts(
-            load_path,
-            min_score=22,
-            reward_smoothing_weight=0.99,
-            graph_labels=graph_labels,
-            # plots_to_plot=["rewards"],
-        )
-
-    # for seed in range(5):
+    # hyps = [0, 0.2]
+    # for hyp in hyps:
+    #     base_path = Path(
+    #         f"../reinforcement_learning/data/PPO-clip/CartPole-v1/28-04-2020/hyp-{hyp}/32-32/seed-0/"
+    #     )
+    #     # param_name = "actor_layers.0.weight"
+    #     # actor_params = np.load(base_path/param_name/ f"{param_name}_1.npy")
+    #     # print(actor_params.shape)
+    #
     #     graph_labels = {
-    #         "Title": f"Mountain Car rewards Random Seed: {seed}",
+    #         "Title": f"Atari Ms Pacman clipped PPO smoothed rewards, clipping parameter: {hyp}",
+    #         # "x": "",
     #         "x": "Episode number",
+    #         # "y": "",
     #         "y": "Score",
+    #         "Legend": [""]
     #     }
-    #     load_path = base_path / f"seed-{seed}"
+    #     load_path = base_path
     #     output_plots_and_counts(
     #         load_path,
-    #         min_score=-9000,
-    #         reward_smoothing_weight=0.98,
+    #         min_score=22,
+    #         reward_smoothing_weight=0.99,
     #         graph_labels=graph_labels,
-    #         plots_to_plot=["rewards"],
+    #         # plots_to_plot=["rewards"],
     #     )
+    base_path = Path(f"../imitation_learning/data/GAIL-clip/MountainCar-v0/02-05-2020/hyp-0.2-num_demos_100/32-32")
+    seed = 1
+    # for seed in range(5):
+    graph_labels = {
+        "Title": f"Mountain Car GAIL, Random Seed: {seed}",
+        "x": "",
+        # "x": "Episode number",
+        "y": "",
+        # "y": "Score",
+        "Legend": []
+    }
+    load_path = base_path / f"seed-{seed}"
+    output_plots_and_counts(
+        load_path,
+        reward_smoothing_weight=0.98,
+        graph_labels=graph_labels,
+        # plots_to_plot=["rewards"],
+    )
 
     # BC plotting the effect of the number of demos
     # alg = "BC"

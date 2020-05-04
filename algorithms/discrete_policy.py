@@ -35,7 +35,7 @@ class DiscretePolicy(nn.Module):
         self, state_dimension: Tuple, action_space: int, params: DiscretePolicyParams,
     ):
         super(DiscretePolicy, self).__init__()
-        self.param_sharing = params.num_shared_layers is not None
+        self.param_sharing = params.num_shared_layers is not None and params.num_shared_layers != 0
         self.params = params
 
         act_layers, shared_layers = self.build_actor(

@@ -41,13 +41,12 @@ class ExperienceBuffer:
         """
         Removes all the oldest data if buffer longer than max size
         """
-        while self.get_length() > self.max_size:
-            self.states.pop(0)
-            self.actions.pop(0)
-            if self.rewards:
-                self.rewards.pop(0)
-            if self.action_probs:
-                self.action_probs.pop(0)
+        self.states = self.states[-self.max_size:]
+        self.actions = self.actions[-self.max_size:]
+        if self.rewards:
+            self.rewards = self.rewards[-self.max_size:]
+        if self.action_probs:
+            self.action_probs = self.action_probs[-self.max_size:]
 
     def clear(self) -> None:
         """Empties buffer and sets to lists"""

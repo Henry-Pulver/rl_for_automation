@@ -4,12 +4,13 @@ import numpy as np
 import cv2
 import torch
 from tqdm import tqdm
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 from collections import namedtuple
 
-from algorithms.discrete_policy import DiscretePolicy
+from algorithms.action_chooser import ActionChooser
 from algorithms.actor_critic import ActorCritic, ActorCriticParams
 from algorithms.buffer import DemonstrationBuffer
+from algorithms.discrete_policy import DiscretePolicy
 
 from envs.atari.consts import GAME_STRINGS_TEST, GAME_STRINGS_LEARN
 
@@ -19,6 +20,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def run_solution(
     choose_action: Callable,
     env: gym.Env,
+    action_chooser: ActionChooser,
     record_video: bool = False,
     show_solution: bool = True,
     episode_timeout: int = 200,
@@ -44,6 +46,7 @@ def run_solution(
                     bgr_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
                     out.write(bgr_array)
             action_chosen = choose_action(state)
+            action_chosen = action_chooser.step(action_chosen)
             if demo_buffer is not None:
                 demo_buffer.update(state, action_chosen, reward=reward)
             state, reward, done, info = env.step(action_chosen)
@@ -66,6 +69,7 @@ def get_average_score(
     num_trials: int,
     env: gym.Env,
     params: namedtuple,
+    chooser_params: Tuple = (None, None, None),
 ) -> float:
     # Load in neural network from file
     net_type = ActorCritic if type(params) == ActorCriticParams else DiscretePolicy
@@ -73,17 +77,20 @@ def get_average_score(
         action_space=env.action_space.n,
         state_dimension=env.observation_space.shape,
         params=params,
-    ).float()
+    ).float().to(device)
     network.load_state_dict(torch.load(network_load, map_location=device))
     network.eval()
+    action_chooser = ActionChooser(*chooser_params)
 
     # Run the env, record the scores
     scores = []
     for trial in tqdm(range(num_trials)):
+        action_chooser.reset()
         video_filename = f"PPO_breakout_{trial}"
         scores.append(
             run_solution(
                 choose_action=network.act,
+                action_chooser=action_chooser,
                 record_video=False,  # Ignore this - instead use Windows + G and record
                 env=env,
                 show_solution=show_solution,

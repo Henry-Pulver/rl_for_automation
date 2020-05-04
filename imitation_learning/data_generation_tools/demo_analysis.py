@@ -5,6 +5,8 @@ from pathlib import Path
 
 from buffer import DemonstrationBuffer
 
+from envs.atari.consts import GAME_STRINGS_LEARN
+
 
 def output_demo_data(env_name: str, demo_path: Path):
     """
@@ -25,22 +27,24 @@ def output_demo_data(env_name: str, demo_path: Path):
     reward_list = []
     for demo_num in range(num_demos):
         demo_buffer.load_demo(demo_num)
-        rewards = demo_buffer.get_rewards()
-
-        states, actions, _ = demo_buffer.recall_memory()
-        reward_sum = np.sum(rewards)
+        reward_sum = np.sum(demo_buffer.get_rewards())
         reward_list.append(reward_sum)
         demo_buffer.clear()
-    print(reward_list)
-    print(np.mean(reward_list))
-    print(f"\nDemo path: {demo_path}\n Rewards: {reward_list}\nReward mean: {np.mean(reward_list)}")
-    print(f"{np.sqrt(np.var(reward_list))}")
+
+    print(f"\nEnv name: {env_name}\nNumber of demos: {num_demos}")
+    print(f"Demo path: {demo_path}\nScores: {reward_list}")
+    print(f"Score mean: {np.mean(reward_list)}\nScore std dev: {np.sqrt(np.var(reward_list))}")
 
 
 def main():
-    env_name = "Breakout-ram-v4"
-    demo_path = Path("../expert_demos")
-    output_demo_data(env_name, demo_path)
+    # env_name = "Breakout-ram-v4"
+    # n = 2
+    env_names = ["MountainCar-v0", "CartPole-v1", "Acrobot-v1"]
+    for n in range(3):
+        # env_name = GAME_STRINGS_LEARN[n]
+        env_name = env_names[n]
+        demo_path = Path("../expert_demos")
+        output_demo_data(env_name, demo_path)
 
 
 if __name__ == "__main__":

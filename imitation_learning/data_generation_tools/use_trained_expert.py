@@ -3,12 +3,13 @@ import gym
 import numpy as np
 import cv2
 import torch
+from tqdm import tqdm
 from typing import Callable, Optional
 
 from algorithms.actor_critic import ActorCritic, ActorCriticParams
 from algorithms.buffer import DemonstrationBuffer
 
-from atari.consts import GAME_STRINGS_TEST
+from envs.atari.consts import GAME_STRINGS_TEST, GAME_STRINGS_LEARN
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -18,7 +19,7 @@ def run_solution(
     env: gym.Env,
     record_video: bool = False,
     show_solution: bool = True,
-    episode_timeout: int = 200,
+    episode_timeout: Optional[int] = None,
     demo_buffer: Optional[DemonstrationBuffer] = None,
     video_fps: int = 60,
     verbose: bool = False,
@@ -42,10 +43,12 @@ def run_solution(
                     out.write(bgr_array)
             action_chosen = choose_action(state)
             if demo_buffer is not None:
-                demo_buffer.update(state, action_chosen, reward=reward)
+                demo_buffer.update(state, action_chosen)
             state, reward, done, info = env.step(action_chosen)
+            demo_buffer.rewards.append(reward)
             total_reward += reward
-            done = step > episode_timeout if not done else done
+            if episode_timeout is not None:
+                done = step > episode_timeout if not done else done
             step += 1
         if verbose:
             print("Final reward = ", total_reward)
@@ -62,7 +65,7 @@ def record_demonstrations(
     num_demos: int,
     save_path: Path,
     show_recording: bool,
-    episode_timeout: int,
+    episode_timeout: Optional[int] = None,
     verbose: bool = False,
 ):
     demo_buffer = DemonstrationBuffer(
@@ -70,9 +73,9 @@ def record_demonstrations(
         state_dimension=env.observation_space.shape,
         action_space_size=env.action_space.n,
     )
-    demo = 0
-    while demo < num_demos:
-        run_solution(
+    returns = []
+    for demo in tqdm(range(num_demos)):
+        returns.append(run_solution(
             env=env,
             choose_action=policy,
             record_video=False,
@@ -80,53 +83,59 @@ def record_demonstrations(
             show_solution=show_recording,
             episode_timeout=episode_timeout,
             verbose=verbose,
-        )
+        ))
         if demo_buffer.get_length() != episode_timeout:
-            print(f"Saving demo number: {demo}")
+            if verbose:
+                print(f"Saving demo number: {demo}")
             demo_buffer.save_demos(demo_number=demo)
-            demo += 1
         demo_buffer.clear()
+    return returns
 
 
 def main():
-    ## IF ATARI ##
-    # game_ref = 0
-    # env_name = GAME_STRINGS_TEST[game_ref]
-
-    ## ELSE NOT ATARI ##
-    env_names = ["Acrobot-v1"]  # , "CartPole-v1"]
-    episode_timeout = 10000
-
-    hidden_layers = (32, 32)
-    activation = "tanh"
+    episode_timeout = None
+    hidden_layers = (128, 128, 128, 128)
+    activation = "relu"
     policy_params = ActorCriticParams(
         actor_layers=hidden_layers,
         critic_layers=hidden_layers,
         actor_activation=activation,
         critic_activation=activation,
-        # num_shared_layers=0,
+        num_shared_layers=3,
     )
 
-    for env_name in env_names:
+    avg_scores = []
+    for game_ref in range(4):
+        game_ref = 2
+        env_name = GAME_STRINGS_TEST[game_ref]
         env = gym.make(env_name).env
-        network_load = f"../../solved_networks/PPO_{env_name}.pth"
+        game_name = GAME_STRINGS_LEARN[game_ref]
+        avg_scores.append(game_name)
+        network_load = f"../../solved_networks/PPO_{game_name}.pth"
         policy = ActorCritic(
             env.observation_space.shape, env.action_space.n, policy_params
         )
         net = torch.load(network_load, map_location=device)
         policy.load_state_dict(net)
         policy.eval()
-        save_path = Path(f"../expert_demos/{env_name}/")
-        num_demos = 9
-        record_demonstrations(
-            env=env,
-            episode_timeout=episode_timeout,
-            policy=policy.act,
-            num_demos=num_demos,
-            save_path=save_path,
-            show_recording=False,
-            verbose=True,
-        )
+        print(run_solution(env=env,
+                     choose_action=policy.act,
+                     record_video=False,
+                     show_solution=True,
+                     episode_timeout=episode_timeout,
+                     verbose=True,))
+        # save_path = Path(f"../expert_demos/{game_name}/")
+        # num_demos = 100
+        # avg_scores.append(np.mean(record_demonstrations(
+        #     env=env,
+        #     episode_timeout=episode_timeout,
+        #     policy=policy.act,
+        #     num_demos=num_demos,
+        #     save_path=save_path,
+        #     show_recording=False,
+        #     verbose=False,
+        # )))
+    print(avg_scores)
 
 
 if __name__ == "__main__":
