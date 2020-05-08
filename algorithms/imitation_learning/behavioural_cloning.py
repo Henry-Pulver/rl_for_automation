@@ -36,21 +36,24 @@ class BCTrainer:
         self.state_space_size = state_space_size
         self.action_space_size = action_space_size
         net_type = ActorCritic if type(params) == ActorCriticParams else DiscretePolicy
-        self.policy = net_type(
-            state_dimension=state_space_size,
-            action_space=action_space_size,
-            params=params,
-        ).float().to(device)
+        self.policy = (
+            net_type(
+                state_dimension=state_space_size,
+                action_space=action_space_size,
+                params=params,
+            )
+            .float()
+            .to(device)
+        )
 
         self.demo_buffer = DemonstrationBuffer(
             demo_path, state_space_size, action_space_size
         )
-        self.epochs_trained = 0
-
         plots = [
             ("minibatch_loss", np.float32),
             ("epoch_loss", np.float32),
             ("avg_score", np.float64),
+            ("std_dev", np.float64),
         ]
         counts = [("num_steps", int)]
         self.plotter = Plotter(
@@ -80,58 +83,50 @@ class BCTrainer:
 
     def train_network(
         self,
-        num_epochs: int,
         demo_list: List,
         max_minibatch_size: int,
         steps_per_epoch: int,
+        epoch_number: int,
     ):
         """
         Trains network for `num_epochs` epochs.
 
         Args:
-            num_epochs: Number of epochs to run.
             demo_list: List of demo numbers which can be used.
             max_minibatch_size: Maximum size of minibatch.
             steps_per_epoch: Number of steps of experience per epoch.
         """
-        # avg_loss_plot = []
-        for epoch in range(1, num_epochs + 1):
-            sum_loss, num_steps = 0, 0
+        sum_loss, num_steps = 0, 0
 
-            while num_steps < steps_per_epoch:
-                while self.demo_buffer.get_length() < max_minibatch_size:
-                    self._load_demos(demo_list)
+        while num_steps < steps_per_epoch:
+            while self.demo_buffer.get_length() < max_minibatch_size:
+                self._load_demos(demo_list)
 
-                minibatch_size = min(steps_per_epoch - num_steps, max_minibatch_size)
+            minibatch_size = min(steps_per_epoch - num_steps, max_minibatch_size)
 
-                sampled_states, sampled_actions, _ = self.demo_buffer.random_sample(
-                    minibatch_size
-                )
-                states = torch.from_numpy(sampled_states).to(device)
-                actions = torch.from_numpy(sampled_actions).to(device)
-                # forward + backward + optimize
-                action_logprobs = torch.log(self.policy(states.float()).float().to(device))
-                actions = actions.type(torch.long)
-
-                loss = self.loss_fn(action_logprobs, actions)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-                self.plotter.record_data(
-                    {"minibatch_loss": loss.cpu().detach().numpy()}
-                )
-                num_steps += minibatch_size
-                sum_loss += loss.cpu().detach().numpy()
-                self._record_nn_params()
-
-            avg_loss = np.round(
-                sum_loss / np.ceil(steps_per_epoch / max_minibatch_size), 5
+            sampled_states, sampled_actions, _ = self.demo_buffer.random_sample(
+                minibatch_size
             )
-            self.plotter.record_data({"epoch_loss": avg_loss})
-            self.plotter.save_plots()
-            self.epochs_trained += 1
-            print(f"Epoch number: {self.epochs_trained}\tAvg loss: {avg_loss}")
-        self._save_network()
+            states = torch.from_numpy(sampled_states).to(device)
+            actions = torch.from_numpy(sampled_actions).to(device)
+            # forward + backward + optimize
+            action_logprobs = torch.log(self.policy(states.float()).float().to(device))
+            actions = actions.type(torch.long)
+
+            loss = self.loss_fn(action_logprobs, actions)
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+            self.plotter.record_data({"minibatch_loss": loss.cpu().detach().numpy()})
+            num_steps += minibatch_size
+            sum_loss += loss.cpu().detach().numpy()
+            self._record_nn_params()
+
+        avg_loss = np.round(sum_loss / np.ceil(steps_per_epoch / max_minibatch_size), 5)
+        self.plotter.record_data({"epoch_loss": avg_loss})
+        self.plotter.save_plots()
+        print(f"Epoch number: {epoch_number}\tAvg loss: {avg_loss}")
+        self._save_network(epoch_number)
 
     def _record_nn_params(self):
         """Gets randomly sampled actor NN parameters from 1st layer."""
@@ -143,16 +138,24 @@ class BCTrainer:
             )
         self.plotter.record_data(sampled_params)
 
-    def _save_network(self):
-        neural_net_save = self.save_path / f"BC-{self.epochs_trained}-epochs.pth"
+    def _save_network(self, epoch_number: int):
+        neural_net_save = self.save_path / f"BC-{epoch_number}-epochs.pth"
         torch.save(self.policy.state_dict(), f"{neural_net_save}")
+
+    def network_exists(self, epoch_number: int):
+        return (self.save_path / f"BC-{epoch_number}-epochs.pth").exists()
+
+    def load_network(self, epoch_number: int):
+        load_path = f"{self.save_path}/BC-{epoch_number}-epochs.pth"
+        print(f"Loading network number: {epoch_number}\tfrom location: {load_path}")
+        self.policy.load_state_dict(torch.load(load_path))
 
 
 def train_behavioural_cloning(
     env_name: str,
     num_demos: int,
     minibatch_size: int,
-    epoch_nums: List,
+    epoch_nums: int,
     steps_per_epoch: int,
     demo_path: Path,
     learning_rate: float,
@@ -162,6 +165,7 @@ def train_behavioural_cloning(
     num_test_trials: int,
     restart: bool,
     date: Optional[str] = None,
+    test_demo_timeout: Optional[int] = None,
     chooser_params: Tuple = (None, None, None),
 ):
     env = gym.make(env_name).env
@@ -169,9 +173,10 @@ def train_behavioural_cloning(
     action_dim = env.action_space.n
 
     demo_list = np.random.choice(os.listdir(f"{demo_path}"), num_demos, replace=False)
+    print(f"Number of demos: {len(demo_list)}")
+    print(f"Demos used: {demo_list}")
 
     for random_seed in random_seeds:
-
         if random_seed is not None:
             torch.manual_seed(random_seed)
             env.seed(random_seed)
@@ -202,24 +207,24 @@ def train_behavioural_cloning(
             param_plot_num=param_plot_num,
         )
 
-        prev_num_epochs = 0
-        for count, epoch_num in enumerate(epoch_nums):
-            if (count + 1) % 2 == 0 or env_name != "MountainCar-v0":
-                num_epochs_to_train = epoch_num - prev_num_epochs
+        for epoch_num in range(1, epoch_nums + 1):
+            if not trainer.network_exists(epoch_num):
                 trainer.train_network(
-                    num_epochs=num_epochs_to_train,
+                    epoch_number=epoch_num,
                     demo_list=demo_list,
                     max_minibatch_size=minibatch_size,
                     steps_per_epoch=steps_per_epoch,
                 )
-                mean_score = get_average_score(
+                mean_score, std_dev = get_average_score(
                     network_load=save_location / f"BC-{epoch_num}-epochs.pth",
                     env=env,
-                    episode_timeout=1998,
-                    show_solution=False,
+                    episode_timeout=test_demo_timeout,
                     num_trials=num_test_trials,
                     params=params,
                     chooser_params=chooser_params,
                 )
-                trainer.plotter.record_data({"avg_score": mean_score})
-                prev_num_epochs += num_epochs_to_train
+                trainer.plotter.record_data(
+                    {"avg_score": mean_score, "std_dev": std_dev}
+                )
+            else:
+                trainer.load_network(epoch_num)

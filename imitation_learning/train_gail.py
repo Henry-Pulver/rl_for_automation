@@ -8,37 +8,38 @@ from imitation_learning.GAIL import HyperparametersGAIL, train_gail
 
 
 def main():
-    # env_names = ["MountainCar-v0", "CartPole-v1", "Acrobot-v1"]
-    env_names = ["MountainCar-v0"]
-    # env_names = ["Acrobot-v1", "CartPole-v1", ]
+    env_names = [
+        "MountainCar-v0",
+        "Acrobot-v1",
+        "CartPole-v1",
+    ]
     log_interval = 20  # print avg reward in the interval
     max_episodes = 10000  # max training episodes
     max_timesteps = 10000  # max timesteps in one episode
-    random_seeds = list(range(5))
+    random_seeds = list(range(10))
     ppo_types = "clip"
-    # chooser_params = (100, 1, 100)
-    discrim_params = DiscrimParams(hidden_layers=(32, 32), activation="tanh",)
+    nn_arch = (32, 32)
+    activation = "tanh"
+    discrim_params = DiscrimParams(hidden_layers=nn_arch, activation=activation,)
     policy_params = ActorCriticParams(
-        actor_layers=(32, 32),
-        actor_activation="tanh",
-        critic_layers=(32, 32),
-        critic_activation="tanh",
+        actor_layers=nn_arch,
+        actor_activation=activation,
+        critic_layers=nn_arch,
+        critic_activation=activation,
         num_shared_layers=1,
     )
-    # policy_params = DiscretePolicyParams(
-    #     actor_layers=(32, 32), actor_activation="tanh",
-    # )
-
     adv_type = "gae"
     demo_path = Path("expert_demos")
-    num_demos = [100]
+    num_demos = [100, 30, 10]
     restart = True
 
     date = datetime.date.today().strftime("%d-%m-%Y")
+    # date = "26-01-1998"
 
-    outcomes = []
+    outer_outcomes = []
     try:
         for env_name in env_names:
+            outcomes = []
             print(f"env name: {env_name}")
             outcomes.append(env_name)
             for demo_num in num_demos:
@@ -46,15 +47,15 @@ def main():
                     gamma=0.99,  # discount factor
                     lamda=0.95,  # GAE factor
                     learning_rate=4e-3,
-                    discrim_lr=8e-2,
+                    discrim_lr=2e-2,
                     num_demos=demo_num,
                     batch_size=1024,  # update policy every n timesteps
                     fraction_expert=0.5,  # fraction of discrim data from expert
-                    epsilon=0.15,  # clip parameter for PPO
+                    epsilon=0.2,  # clip parameter for PPO
                     c1=0.5,  # value hyperparam
                     c2=0.0,  # entropy hyperparam
                     num_epochs=3,  # update policy for K epochs
-                    num_discrim_epochs=10,  # update discriminator for K epochs
+                    num_discrim_epochs=5,  # update discriminator for K epochs
                     success_margin=10,  # % less than expert avg that is success
                 )
                 outcomes.append(demo_num)
@@ -78,6 +79,7 @@ def main():
                         verbose=False,
                     )
                 )
+            outer_outcomes.append(outcomes)
     finally:
         print(f"outcomes:")
         for outcome in outcomes:

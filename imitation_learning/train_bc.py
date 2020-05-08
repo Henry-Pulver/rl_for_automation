@@ -9,16 +9,17 @@ def main():
     env_names = [
         "CartPole-v1",
         "MountainCar-v0",
-        "Acrobot-v1",
+        # "Acrobot-v1",
     ]
-    date = datetime.date.today().strftime("%d-%m-%Y")
-    num_demos = [1, 2, 5, 10, 20, 50, 100]  # , 200, 500, 1000]
-    # num_demos = [100]  # , 200, 500, 1000]
-    num_epochs = list(range(1, 50 + 1))
+    # date = datetime.date.today().strftime("%d-%m-%Y")
+    date = "04-05-2020"
+    num_demos = [1, 2, 5, 10, 20, 50, 100]
+    num_epochs = 90
     minibatch_size = 64
-    random_seeds = list(range(8))
-    steps_per_epoch_list = [4000, 10000, 2000]
-    chooser_params = (None, None, None)
+    random_seeds = list(range(9))
+    steps_per_epoch_list = [3000, 6000]  # 2000,
+    test_demo_timeout = 10000
+    # chooser_params = (None, None, None)
 
     # NN Architecture - hidden layer sizes
     hidden_layers = (32, 32)
@@ -44,9 +45,39 @@ def main():
                 param_plot_num=5,
                 random_seeds=random_seeds,
                 steps_per_epoch=steps_per_epoch,
-                num_test_trials=40,
+                num_test_trials=25,
                 restart=False,
-                chooser_params=chooser_params,
+                test_demo_timeout=test_demo_timeout,
+                # chooser_params=chooser_params,
+            )
+    env_names = [
+        # "CartPole-v1",
+        # "MountainCar-v0",
+        "Acrobot-v1",
+    ]
+    num_epochs = 30
+
+    for env_name, steps_per_epoch in zip(env_names, steps_per_epoch_list):
+        print(f"\nRunning BC on env: {env_name}")
+        demo_path = Path(f"expert_demos/{env_name}/")
+        for demo_num in num_demos:
+            print(f"Num demos: {demo_num}")
+            train_behavioural_cloning(
+                num_demos=demo_num,
+                env_name=env_name,
+                epoch_nums=num_epochs,
+                minibatch_size=minibatch_size,
+                demo_path=demo_path,
+                params=discrete_policy_params,
+                learning_rate=1e-4,
+                date=date,
+                param_plot_num=5,
+                random_seeds=random_seeds,
+                steps_per_epoch=steps_per_epoch,
+                num_test_trials=25,
+                restart=False,
+                test_demo_timeout=test_demo_timeout,
+                # chooser_params=chooser_params,
             )
 
 

@@ -94,7 +94,9 @@ class PPO:
             ("mean_clipped_loss", np.ndarray),
             ("rewards", float),
         ]
-        plots = plots + [("mean_entropy_loss", np.float64)] if self.hyp.c2 != 0 else plots
+        plots = (
+            plots + [("mean_entropy_loss", np.float64)] if self.hyp.c2 != 0 else plots
+        )
         plots = plots + [("mean_value_loss", np.ndarray)] if self.using_value else plots
         counts = [("num_steps_taken", int), ("episode_num", int)]
         self.plotter = Plotter(
@@ -222,15 +224,17 @@ class PPO:
                 main_loss = -surr1
             else:
                 raise ValueError("Invalid PPO type used!")
-            plot_data["mean_clipped_loss"] = deepcopy(main_loss.mean().detach().cpu().numpy())
+            plot_data["mean_clipped_loss"] = deepcopy(
+                main_loss.mean().detach().cpu().numpy()
+            )
 
             loss = main_loss
             if self.hyp.c2 != 0:
                 entropy_loss = -self.hyp.c2 * dist_entropy.mean()
                 loss += entropy_loss
-                plot_data["mean_entropy_loss"] = deepcopy(np.squeeze(
-                    entropy_loss.mean().detach().cpu().numpy()
-                ))
+                plot_data["mean_entropy_loss"] = deepcopy(
+                    np.squeeze(entropy_loss.mean().detach().cpu().numpy())
+                )
         else:
             loss = torch.tensor([0], requires_grad=True, dtype=torch.float32).clone()
 
@@ -314,6 +318,7 @@ def train_ppo(
     chooser_params: Tuple = (None, None, None),
     restart: bool = False,
     action_space: Optional[List] = None,
+    worst_performance: Optional[int] = None,
 ):
     try:
         env = gym.make(env_name).env
@@ -368,6 +373,7 @@ def train_ppo(
 
             # training loop
             print(f"Starting running from episode number {ep_num_start + 1}\n")
+            worst_performance_count = 0
             for ep_num in range(ep_num_start + 1, max_episodes + 1):  # Run episodes
                 state = env.reset()
                 ep_total_reward = 0
@@ -408,10 +414,9 @@ def train_ppo(
 
                 ep_str = ("{0:0" + f"{len(str(max_episodes))}" + "d}").format(ep_num)
                 if verbose:
-                    print(f"{ep_total_reward},")
-                    # print(
-                    #     f"Episode {ep_str} of {max_episodes}. \t Total reward = {ep_total_reward}"
-                    # )
+                    print(
+                        f"Episode {ep_str} of {max_episodes}. \t Total reward = {ep_total_reward}"
+                    )
 
                 if ep_num % log_interval == 0:
                     print(
@@ -423,6 +428,14 @@ def train_ppo(
                     if running_reward > solved_reward:
                         print("########## Solved! ##########")
                         break
+                    elif worst_performance is not None:
+                        if running_reward <= worst_performance:
+                            worst_performance_count += 1
+                            if worst_performance_count >= 20:
+                                print("BREAK AS NOT LEARNING")
+                                break
+                        else:
+                            worst_performance_count = 0
                     running_reward = 0
                     avg_length = 0
             episode_numbers.append(ep_num)

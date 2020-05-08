@@ -23,7 +23,7 @@ def run_solution(
     action_chooser: ActionChooser,
     record_video: bool = False,
     show_solution: bool = True,
-    episode_timeout: int = 200,
+    episode_timeout: Optional[int] = 200,
     demo_buffer: Optional[DemonstrationBuffer] = None,
     video_fps: int = 60,
     verbose: bool = False,
@@ -64,20 +64,25 @@ def run_solution(
 
 def get_average_score(
     network_load: Path,
-    episode_timeout: int,
-    show_solution: bool,
+    episode_timeout: Optional[int],
     num_trials: int,
     env: gym.Env,
     params: namedtuple,
+    show_solution: bool = False,
     chooser_params: Tuple = (None, None, None),
-) -> float:
+) -> Tuple:
     # Load in neural network from file
     net_type = ActorCritic if type(params) == ActorCriticParams else DiscretePolicy
-    network = net_type(
-        action_space=env.action_space.n,
-        state_dimension=env.observation_space.shape,
-        params=params,
-    ).float().to(device)
+    network = (
+        net_type(
+            action_space=env.action_space.n,
+            state_dimension=env.observation_space.shape,
+            params=params,
+        )
+        .float()
+        .to(device)
+    )
+    print(network_load)
     network.load_state_dict(torch.load(network_load, map_location=device))
     network.eval()
     action_chooser = ActionChooser(*chooser_params)
@@ -98,10 +103,12 @@ def get_average_score(
                 video_filename=video_filename,
             )
         )
+    mean = np.mean(scores)
+    std_dev = np.sqrt(np.var(scores))
     print(f"\nScores: {scores}")
-    print(f"\nMean score: {np.mean(scores)}")
-    print(f"\nStd Dev: {np.sqrt(np.var(scores))}")
-    return np.mean(scores)
+    print(f"\nMean score: {mean}")
+    print(f"\nStd Dev: {std_dev}")
+    return mean, std_dev
 
 
 def main():

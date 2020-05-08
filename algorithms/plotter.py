@@ -77,10 +77,6 @@ class Plot:
             if type(data_entry) == np.ndarray:
                 assert data_entry.dtype == self.datatype
             else:
-                # print(self.name)
-                # print(self.datatype)
-                # print(type(data_entry))
-                # print(data_entry)
                 assert type(data_entry) == self.datatype
         self.plot.append(data_entry)
         if len(self.plot) >= self.max_plot_size:
@@ -175,7 +171,11 @@ class Plotter:
             param_plot_num: Number of params to plot per layer.
             state_dim: Tuple specifying the dimension of the state space.
         """
-        num_shared = network_params.num_shared_layers if (self.using_value and network_params.num_shared_layers is not None) else 0
+        num_shared = (
+            network_params.num_shared_layers
+            if (self.using_value and network_params.num_shared_layers is not None)
+            else 0
+        )
         prev_layer_size = np.prod(state_dim)
 
         for count, layer in enumerate(network_params.actor_layers):

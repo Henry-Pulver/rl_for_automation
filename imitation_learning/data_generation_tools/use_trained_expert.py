@@ -45,7 +45,8 @@ def run_solution(
             if demo_buffer is not None:
                 demo_buffer.update(state, action_chosen)
             state, reward, done, info = env.step(action_chosen)
-            demo_buffer.rewards.append(reward)
+            if demo_buffer is not None:
+                demo_buffer.rewards.append(reward)
             total_reward += reward
             if episode_timeout is not None:
                 done = step > episode_timeout if not done else done
@@ -67,6 +68,7 @@ def record_demonstrations(
     show_recording: bool,
     episode_timeout: Optional[int] = None,
     verbose: bool = False,
+    first_demo_num: int = 0,
 ):
     demo_buffer = DemonstrationBuffer(
         save_path=save_path,
@@ -74,16 +76,18 @@ def record_demonstrations(
         action_space_size=env.action_space.n,
     )
     returns = []
-    for demo in tqdm(range(num_demos)):
-        returns.append(run_solution(
-            env=env,
-            choose_action=policy,
-            record_video=False,
-            demo_buffer=demo_buffer,
-            show_solution=show_recording,
-            episode_timeout=episode_timeout,
-            verbose=verbose,
-        ))
+    for demo in tqdm(range(first_demo_num, first_demo_num + num_demos)):
+        returns.append(
+            run_solution(
+                env=env,
+                choose_action=policy,
+                record_video=False,
+                demo_buffer=demo_buffer,
+                show_solution=show_recording,
+                episode_timeout=episode_timeout,
+                verbose=verbose,
+            )
+        )
         if demo_buffer.get_length() != episode_timeout:
             if verbose:
                 print(f"Saving demo number: {demo}")
@@ -105,36 +109,40 @@ def main():
     )
 
     avg_scores = []
-    for game_ref in range(4):
-        game_ref = 2
-        env_name = GAME_STRINGS_TEST[game_ref]
-        env = gym.make(env_name).env
-        game_name = GAME_STRINGS_LEARN[game_ref]
-        avg_scores.append(game_name)
-        network_load = f"../../solved_networks/PPO_{game_name}.pth"
-        policy = ActorCritic(
-            env.observation_space.shape, env.action_space.n, policy_params
+    game_ref = 0
+    env_name = GAME_STRINGS_TEST[game_ref]
+    env = gym.make(env_name).env
+    game_name = GAME_STRINGS_LEARN[game_ref]
+    avg_scores.append(game_name)
+    network_load = f"../../solved_networks/PPO_{game_name}.pth"
+    policy = ActorCritic(env.observation_space.shape, env.action_space.n, policy_params)
+    net = torch.load(network_load, map_location=device)
+    policy.load_state_dict(net)
+    policy.eval()
+    # print(run_solution(env=env,
+    #                      choose_action=policy.act,
+    #                      record_video=False,
+    #                      show_solution=True,
+    #                      episode_timeout=episode_timeout,
+    #                      verbose=True,))
+
+    save_path = Path(f"../expert_demos/{game_name}/")
+    num_demos = 296
+    first_demo = 704
+    avg_scores.append(
+        np.mean(
+            record_demonstrations(
+                env=env,
+                episode_timeout=episode_timeout,
+                policy=policy.act,
+                num_demos=num_demos,
+                save_path=save_path,
+                show_recording=False,
+                verbose=False,
+                first_demo_num=first_demo,
+            )
         )
-        net = torch.load(network_load, map_location=device)
-        policy.load_state_dict(net)
-        policy.eval()
-        print(run_solution(env=env,
-                     choose_action=policy.act,
-                     record_video=False,
-                     show_solution=True,
-                     episode_timeout=episode_timeout,
-                     verbose=True,))
-        # save_path = Path(f"../expert_demos/{game_name}/")
-        # num_demos = 100
-        # avg_scores.append(np.mean(record_demonstrations(
-        #     env=env,
-        #     episode_timeout=episode_timeout,
-        #     policy=policy.act,
-        #     num_demos=num_demos,
-        #     save_path=save_path,
-        #     show_recording=False,
-        #     verbose=False,
-        # )))
+    )
     print(avg_scores)
 
 
