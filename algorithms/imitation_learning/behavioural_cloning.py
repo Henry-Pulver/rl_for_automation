@@ -110,7 +110,7 @@ class BCTrainer:
             states = torch.from_numpy(sampled_states).to(device)
             actions = torch.from_numpy(sampled_actions).to(device)
             # forward + backward + optimize
-            action_logprobs = torch.log(self.policy(states.float()).float().to(device))
+            action_logprobs = self.policy.logprobs(states.float()).float().to(device)
             actions = actions.type(torch.long)
 
             loss = self.loss_fn(action_logprobs, actions)
@@ -172,14 +172,11 @@ def train_behavioural_cloning(
     state_dim = env.observation_space.shape
     action_dim = env.action_space.n
 
-    demo_list = np.random.choice(os.listdir(f"{demo_path}"), num_demos, replace=False)
-    print(f"Number of demos: {len(demo_list)}")
-    print(f"Demos used: {demo_list}")
-
     for random_seed in random_seeds:
         if random_seed is not None:
             torch.manual_seed(random_seed)
             env.seed(random_seed)
+            np.random.seed(random_seed)
             print(f"Set random seed to: {random_seed}")
 
         hyp_str = f"demos-{num_demos}"
@@ -206,6 +203,10 @@ def train_behavioural_cloning(
             params=params,
             param_plot_num=param_plot_num,
         )
+
+        demo_list = list(trainer.plotter.determine_demo_nums(demo_path, num_demos))
+        print(f"Number of demos: {len(demo_list)}")
+        print(f"Demos used: {demo_list}")
 
         for epoch_num in range(1, epoch_nums + 1):
             if not trainer.network_exists(epoch_num):

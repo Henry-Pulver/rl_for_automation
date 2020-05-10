@@ -458,7 +458,7 @@ def main():
             "y": "Avg Score",
         }
         plot_demo_num_avgs(
-            load_path=Path(f"../imitation_learning/data/{alg}/{env_name}/04-05-2020/"),
+            load_path=Path(f"../imitation_learning/data/{alg}/{env_name}/09-05-2020/"),
             arch_str="32-32",
             plot_to_plot="avg_score",
             graph_labels=graph_labels,

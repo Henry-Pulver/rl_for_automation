@@ -45,6 +45,7 @@ class DiscretePolicy(nn.Module):
         )
         self.shared_layers = nn.Sequential(*shared_layers)
         self.actor_layers = nn.Sequential(*act_layers)
+        self.log_softmax = nn.LogSoftmax(dim=-1)
 
     def build_actor(
         self,
@@ -74,6 +75,10 @@ class DiscretePolicy(nn.Module):
         x = self.shared_layers(x) if self.param_sharing else x
         action_probs = self.actor_layers(x)
         return action_probs
+
+    def logprobs(self, x):
+        x = self.shared_layers(x) if self.param_sharing else x
+        return self.log_softmax(self.actor_layers[:-1](x))
 
     def evaluate(self, state: np.ndarray, action: torch.tensor) -> Tuple:
         action_probs = self.forward(state)

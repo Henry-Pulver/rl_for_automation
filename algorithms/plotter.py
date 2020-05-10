@@ -218,7 +218,6 @@ class Plotter:
             demo_path: The path to the demo files.
             num_demos: The number of demos to use.
         """
-        assert self.using_discrim
         demo_nums_save = self.param_save / "demo_nums.npy"
         if demo_nums_save.exists():
             demo_nums = np.load(f"{demo_nums_save}")

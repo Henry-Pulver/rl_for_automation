@@ -9,9 +9,10 @@ from imitation_learning.GAIL import HyperparametersGAIL, train_gail
 
 def main():
     env_names = [
-        "MountainCar-v0",
-        "Acrobot-v1",
         "CartPole-v1",
+        "Acrobot-v1",
+        "MountainCar-v0",
+
     ]
     log_interval = 20  # print avg reward in the interval
     max_episodes = 10000  # max training episodes
@@ -51,11 +52,11 @@ def main():
                     num_demos=demo_num,
                     batch_size=1024,  # update policy every n timesteps
                     fraction_expert=0.5,  # fraction of discrim data from expert
-                    epsilon=0.2,  # clip parameter for PPO
+                    epsilon=0.1,  # clip parameter for PPO
                     c1=0.5,  # value hyperparam
-                    c2=0.0,  # entropy hyperparam
+                    c2=0.01,  # entropy hyperparam
                     num_epochs=3,  # update policy for K epochs
-                    num_discrim_epochs=5,  # update discriminator for K epochs
+                    num_discrim_epochs=4,  # update discriminator for K epochs
                     success_margin=10,  # % less than expert avg that is success
                 )
                 outcomes.append(demo_num)
@@ -75,14 +76,14 @@ def main():
                         date=date,
                         param_plot_num=10,
                         restart=restart,
-                        policy_burn_in=0,
+                        # policy_burn_in=0,
                         verbose=False,
                     )
                 )
             outer_outcomes.append(outcomes)
     finally:
         print(f"outcomes:")
-        for outcome in outcomes:
+        for outcome in outer_outcomes:
             print(outcome)
 
 

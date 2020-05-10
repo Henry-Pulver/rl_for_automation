@@ -71,6 +71,7 @@ def sample_from_buffers(
     action_space: int,
     possible_demos: List,
     num_discrim_epochs: int,
+    action_one_hot_value: float,
 ):
     num_learner_samples = gail_buffer.get_length()
     learner_states = torch.stack(gail_buffer.states).to(device).detach()
@@ -78,7 +79,7 @@ def sample_from_buffers(
     learner_action_vectors = torch.zeros((learner_actions.shape[0], action_space)).to(
         device
     )
-    learner_action_vectors[torch.arange(learner_actions.shape[0]), learner_actions] = 1
+    learner_action_vectors[torch.arange(learner_actions.shape[0]), learner_actions] = action_one_hot_value
     learner_tuples = torch.cat((learner_states, learner_action_vectors), dim=1)
 
     num_expert_samples = int(
@@ -97,7 +98,7 @@ def sample_from_buffers(
     expert_action_vectors = torch.zeros((expert_actions.shape[0], action_space)).to(
         device
     )
-    expert_action_vectors[torch.arange(expert_actions.shape[0]), expert_actions] = 1
+    expert_action_vectors[torch.arange(expert_actions.shape[0]), expert_actions] = action_one_hot_value
     expert_tuples = torch.cat((expert_states, expert_action_vectors), dim=1)
 
     data_set = torch.cat((learner_tuples, expert_tuples), dim=0)
@@ -206,9 +207,7 @@ class GAIL(PPO):
         # Update policy
         buffer.rewards = list(
             np.squeeze(
-                torch.log(
-                    self.discriminator.prob_expert(state_actions[:num_learner_samples])
-                )  # Take log of discrim
+                self.discriminator.logprob_expert(state_actions[:num_learner_samples])
                 .float()
                 .detach()
                 .cpu()
@@ -268,6 +267,7 @@ def train_gail(
     action_space: Optional[List] = None,
     worst_performance: Optional[int] = None,
     demo_avg_reward: Optional[float] = None,
+    action_one_hot_value: float = 1.0,
 ):
     try:
         env = gym.make(env_name).env
@@ -279,6 +279,7 @@ def train_gail(
             if random_seed is not None:
                 torch.manual_seed(random_seed)
                 env.seed(random_seed)
+                np.random.seed(random_seed)
                 print(f"Set random seed to: {random_seed}")
 
             buffer = GAILExperienceBuffer(state_dim, action_dim)
@@ -364,6 +365,7 @@ def train_gail(
                             action_dim,
                             possible_demos,
                             hyp.num_discrim_epochs,
+                            action_one_hot_value,
                         )
                         gail.update(buffer, ep_num)
                         buffer.clear()
