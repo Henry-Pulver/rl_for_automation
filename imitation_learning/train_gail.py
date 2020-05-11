@@ -4,7 +4,7 @@ from pathlib import Path
 from discrete_policy import DiscretePolicyParams
 from actor_critic import ActorCriticParams
 from discriminator import DiscrimParams
-from imitation_learning.GAIL import HyperparametersGAIL, train_gail
+from imitation_learning.GAIL import HyperparametersGAIL, GAILTrainer
 
 
 def main():
@@ -12,7 +12,6 @@ def main():
         "CartPole-v1",
         "Acrobot-v1",
         "MountainCar-v0",
-
     ]
     log_interval = 20  # print avg reward in the interval
     max_episodes = 10000  # max training episodes
@@ -42,6 +41,9 @@ def main():
         for env_name in env_names:
             outcomes = []
             print(f"env name: {env_name}")
+            trainer = GAILTrainer(
+                env_name=env_name, save_base_path=Path("data"), date=date,
+            )
             outcomes.append(env_name)
             for demo_num in num_demos:
                 hyp = HyperparametersGAIL(
@@ -61,11 +63,10 @@ def main():
                 )
                 outcomes.append(demo_num)
                 outcomes.append(
-                    train_gail(
+                    trainer.train(
                         demo_path=demo_path / env_name,
-                        env_name=env_name,
-                        hyp=hyp,
                         policy_params=policy_params,
+                        hyp=hyp,
                         discrim_params=discrim_params,
                         random_seeds=random_seeds,
                         log_interval=log_interval,
@@ -73,10 +74,8 @@ def main():
                         max_timesteps=max_timesteps,
                         ppo_type=ppo_types,
                         adv_type=adv_type,
-                        date=date,
                         param_plot_num=10,
                         restart=restart,
-                        # policy_burn_in=0,
                         verbose=False,
                     )
                 )

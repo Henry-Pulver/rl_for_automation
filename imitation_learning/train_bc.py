@@ -2,7 +2,7 @@ from pathlib import Path
 import datetime
 
 from algorithms.discrete_policy import DiscretePolicyParams
-from algorithms.imitation_learning.behavioural_cloning import train_behavioural_cloning
+from algorithms.imitation_learning.behavioural_cloning import BCTrainer
 
 
 def main():
@@ -12,7 +12,6 @@ def main():
         # "Acrobot-v1",
     ]
     # date = datetime.date.today().strftime("%d-%m-%Y")
-    date = "1235457"
     num_demos = [1, 3, 10, 30, 100]
     num_epochs = 50
     minibatch_size = 64
@@ -33,22 +32,22 @@ def main():
         demo_path = Path(f"expert_demos/{env_name}/")
         for demo_num in num_demos:
             print(f"Num demos: {demo_num}")
-            train_behavioural_cloning(
+            trainer = BCTrainer(
+                env_name=env_name, save_base_path=Path("data"), date=date
+            )
+            trainer.train(
                 num_demos=demo_num,
-                env_name=env_name,
                 epoch_nums=num_epochs,
                 minibatch_size=minibatch_size,
                 demo_path=demo_path,
                 params=discrete_policy_params,
                 learning_rate=1e-4,
-                date=date,
                 param_plot_num=5,
                 random_seeds=random_seeds,
                 steps_per_epoch=steps_per_epoch,
                 num_test_trials=20,
                 restart=False,
                 test_demo_timeout=test_demo_timeout,
-                # chooser_params=chooser_params,
             )
 
 

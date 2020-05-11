@@ -226,6 +226,8 @@ class Plotter:
                 os.listdir(f"{demo_path}"), num_demos, replace=False
             )
             np.save(f"{demo_nums_save}", demo_nums)
+        print(f"Number of demos: {len(demo_nums)}")
+        print(f"Demos used: {demo_nums}")
         return demo_nums
 
     def _sample_params(self, layer_name, layer, prev_layer_size, param_plot_num):

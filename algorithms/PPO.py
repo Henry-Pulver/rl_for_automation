@@ -16,6 +16,7 @@ from discriminator import DiscrimParams
 from advantage_estimation import get_td_error, get_gae
 from buffer import PPOExperienceBuffer
 from plotter import Plotter
+from trainer import Trainer, RunLogger
 from utils import generate_save_location, generate_ppo_hyp_str
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -296,6 +297,137 @@ class PPO:
         print(f"Loading neural network saved at: {self.neural_net_save}")
         net = torch.load(self.neural_net_save, map_location=device)
         self.policy.load_state_dict(net)
+
+
+class PPOTrainer(Trainer):
+    def train(
+        self,
+        max_episodes: int,
+        log_interval: int,
+        hyp: HyperparametersPPO,
+        actor_critic_params: ActorCriticParams,
+        solved_reward: float,
+        random_seeds: List,
+        load_path: Optional[str] = None,
+        max_timesteps: Optional[int] = None,
+        render: bool = False,
+        ppo_type: str = "clip",
+        advantage_type: str = "monte_carlo_baseline",
+        param_plot_num: int = 2,
+        policy_burn_in: int = 0,
+        chooser_params: Tuple = (None, None, None),
+        restart: bool = False,
+        action_space: Optional[List] = None,
+        worst_performance: Optional[int] = None,
+        log_type: str = "legacy",
+        verbose: bool = False,
+    ):
+        try:
+            episode_numbers = []
+            for random_seed in random_seeds:
+                self.set_seed(random_seed)
+
+                buffer = PPOExperienceBuffer(self.state_dim, self.action_dim)
+
+                save_path = generate_save_location(
+                    Path("data"),
+                    actor_critic_params.actor_layers,
+                    f"PPO-{ppo_type}",
+                    self.env_name,
+                    random_seed,
+                    generate_ppo_hyp_str(ppo_type, hyp),
+                    self.date,
+                )
+                self.restart(save_path, restart)
+
+                ppo = PPO(
+                    state_dimension=self.state_dim,
+                    action_space=self.action_dim,
+                    policy_params=actor_critic_params,
+                    hyperparameters=hyp,
+                    save_path=save_path,
+                    ppo_type=ppo_type,
+                    advantage_type=advantage_type,
+                    param_plot_num=param_plot_num,
+                    policy_burn_in=policy_burn_in,
+                    verbose=verbose,
+                )
+                if load_path is not None:
+                    ppo.policy.load_state_dict(torch.load(load_path))
+
+                # logging variables
+                update_timestep = 0  # Determines when to update the network
+                action_chooser = ActionChooser(*chooser_params, action_space)
+                run_logger = RunLogger(max_episodes, log_type, 0.99, verbose)
+                ep_num_start = ppo.plotter.get_count("episode_num")
+
+                # training loop
+                print(f"Starting running from episode number {ep_num_start + 1}\n")
+                worst_performance_count = 0
+                for ep_num in range(ep_num_start + 1, max_episodes + 1):  # Run episodes
+                    state = self.env.reset()
+                    t = 0
+                    action_chooser.reset()
+                    keep_running = True if max_timesteps is None else t < max_timesteps
+                    while keep_running:  # Run 1 episode
+                        update_timestep += 1
+                        t += 1
+                        keep_running = (
+                            True if max_timesteps is None else t < max_timesteps
+                        )
+
+                        # Running policy_old:
+                        action = ppo.policy_old.act(state, buffer)
+                        action = action_chooser.step(action)
+                        state, reward, done, _ = self.env.step(action)
+
+                        # Saving reward and is_terminal:
+                        buffer.rewards.append(reward)
+                        buffer.is_terminal.append(done)
+
+                        # update if its time
+                        if update_timestep % hyp.T == 0:
+                            ppo.update(buffer, ep_num)
+                            buffer.clear()
+                            update_timestep = 0
+
+                        run_logger.update(1, reward)
+                        if render:
+                            self.env.render()
+                        if done:
+                            break
+
+                    ppo.plotter.record_data(
+                        {
+                            "rewards": run_logger.ep_reward,
+                            "num_steps_taken": t,
+                            "episode_num": 1,
+                        }
+                    )
+                    run_logger.end_episode(ep_num)
+
+                    if ep_num % log_interval == 0:
+                        run_logger.output_logs(ep_num, log_interval)
+                        ppo.save()
+
+                        # stop training if avg_reward > solved_reward
+                        if run_logger.avg_reward > solved_reward:
+                            print("########## Solved! ##########")
+                            break
+                        elif worst_performance is not None:
+                            if run_logger.avg_reward <= worst_performance:
+                                worst_performance_count += 1
+                                if worst_performance_count >= 20:
+                                    print("BREAK AS NOT LEARNING")
+                                    break
+                            else:
+                                worst_performance_count = 0
+                episode_numbers.append(ep_num)
+            print(f"episode_numbers: {episode_numbers}")
+            return episode_numbers
+        except KeyboardInterrupt as interrupt:
+            ppo.save()
+            raise interrupt
 
 
 def train_ppo(

@@ -34,7 +34,7 @@ def run_solution(
     if record_video:
         fourcc = cv2.VideoWriter_fourcc(*"H264")
         out = cv2.VideoWriter(f"{video_filename}.mp4", fourcc, video_fps, (600, 400))
-    env.seed(np.random.randint(low=0, high=2000))
+    # env.seed(np.random.randint(low=0, high=2000))
     state = env.reset()
     done = False
     total_reward, reward, step = 0, 0, 0

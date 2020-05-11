@@ -1,6 +1,8 @@
-from PPO import HyperparametersPPO, train_ppo
-from actor_critic import ActorCriticParams
 import datetime
+from pathlib import Path
+
+from PPO import HyperparametersPPO, PPOTrainer
+from actor_critic import ActorCriticParams
 
 
 def main():
@@ -54,9 +56,11 @@ def main():
             ):
                 outcomes.append(env_name)
                 outcomes.append(beta)
+                trainer = PPOTrainer(
+                    env_name=env_name, save_base_path=Path("data"), date=date,
+                )
                 outcomes.append(
-                    train_ppo(
-                        env_name=env_name,
+                    trainer.train(
                         solved_reward=solved_reward,
                         hyp=hyp,
                         actor_critic_params=actor_critic_params,
@@ -66,7 +70,6 @@ def main():
                         max_timesteps=max_timesteps,
                         ppo_type=ppo_type,
                         advantage_type=adv_type,
-                        date=date,
                         param_plot_num=10,
                         restart=True,
                         worst_performance=worst,

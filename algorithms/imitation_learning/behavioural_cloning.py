@@ -13,6 +13,7 @@ from algorithms.actor_critic import ActorCritic, ActorCriticParams
 from algorithms.discrete_policy import DiscretePolicy
 from algorithms.buffer import DemonstrationBuffer
 from algorithms.plotter import Plotter
+from algorithms.trainer import Trainer
 from algorithms.utils import generate_save_location
 
 from envs.atari.checking import get_average_score
@@ -21,7 +22,7 @@ from envs.atari.checking import get_average_score
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class BCTrainer:
+class BC:
     def __init__(
         self,
         demo_path: Path,
@@ -151,81 +152,68 @@ class BCTrainer:
         self.policy.load_state_dict(torch.load(load_path))
 
 
-def train_behavioural_cloning(
-    env_name: str,
-    num_demos: int,
-    minibatch_size: int,
-    epoch_nums: int,
-    steps_per_epoch: int,
-    demo_path: Path,
-    learning_rate: float,
-    random_seeds: List,
-    params: namedtuple,
-    param_plot_num: int,
-    num_test_trials: int,
-    restart: bool,
-    date: Optional[str] = None,
-    test_demo_timeout: Optional[int] = None,
-    chooser_params: Tuple = (None, None, None),
-):
-    env = gym.make(env_name).env
-    state_dim = env.observation_space.shape
-    action_dim = env.action_space.n
+class BCTrainer(Trainer):
+    def train(
+        self,
+        num_demos: int,
+        minibatch_size: int,
+        epoch_nums: int,
+        steps_per_epoch: int,
+        demo_path: Path,
+        learning_rate: float,
+        random_seeds: List,
+        params: namedtuple,
+        param_plot_num: int,
+        num_test_trials: int,
+        restart: bool,
+        test_demo_timeout: Optional[int] = None,
+        chooser_params: Tuple = (None, None, None),
+    ):
+        random_seeds = random_seeds if random_seeds is not None else [0]
+        for random_seed in random_seeds:
+            self.set_seed(random_seed)
 
-    for random_seed in random_seeds:
-        if random_seed is not None:
-            torch.manual_seed(random_seed)
-            env.seed(random_seed)
-            np.random.seed(random_seed)
-            print(f"Set random seed to: {random_seed}")
+            save_location = generate_save_location(
+                self.save_base_path,
+                params.actor_layers,
+                f"BC",
+                self.env_name,
+                random_seed,
+                f"demos-{num_demos}",
+                self.date,
+            )
+            self.restart(save_location, restart)
 
-        hyp_str = f"demos-{num_demos}"
-        save_location = generate_save_location(
-            Path("data"),
-            params.actor_layers,
-            f"BC",
-            env_name,
-            random_seed,
-            hyp_str,
-            date,
-        )
-        if restart:
-            if save_location.exists():
-                print("Old data removed!")
-                rmtree(save_location)
+            bc = BC(
+                demo_path=demo_path,
+                save_path=save_location,
+                learning_rate=learning_rate,
+                action_space_size=self.action_dim,
+                state_space_size=self.state_dim,
+                params=params,
+                param_plot_num=param_plot_num,
+            )
 
-        trainer = BCTrainer(
-            demo_path=demo_path,
-            save_path=save_location,
-            learning_rate=learning_rate,
-            action_space_size=action_dim,
-            state_space_size=state_dim,
-            params=params,
-            param_plot_num=param_plot_num,
-        )
+            demo_list = list(bc.plotter.determine_demo_nums(demo_path, num_demos))
 
-        demo_list = list(trainer.plotter.determine_demo_nums(demo_path, num_demos))
-        print(f"Number of demos: {len(demo_list)}")
-        print(f"Demos used: {demo_list}")
-
-        for epoch_num in range(1, epoch_nums + 1):
-            if not trainer.network_exists(epoch_num):
-                trainer.train_network(
-                    epoch_number=epoch_num,
-                    demo_list=demo_list,
-                    max_minibatch_size=minibatch_size,
-                    steps_per_epoch=steps_per_epoch,
-                )
-                mean_score, std_dev = get_average_score(
-                    network_load=save_location / f"BC-{epoch_num}-epochs.pth",
-                    env=env,
-                    episode_timeout=test_demo_timeout,
-                    num_trials=num_test_trials,
-                    params=params,
-                    chooser_params=chooser_params,
-                )
-                trainer.plotter.record_data(
-                    {"avg_score": mean_score, "std_dev": std_dev}
-                )
-            else:
-                trainer.load_network(epoch_num)
+            for epoch_num in range(1, epoch_nums + 1):
+                if not bc.network_exists(epoch_num):
+                    bc.train_network(
+                        epoch_number=epoch_num,
+                        demo_list=demo_list,
+                        max_minibatch_size=minibatch_size,
+                        steps_per_epoch=steps_per_epoch,
+                    )
+                    mean_score, std_dev = get_average_score(
+                        network_load=save_location / f"BC-{epoch_num}-epochs.pth",
+                        env=self.env,
+                        episode_timeout=test_demo_timeout,
+                        num_trials=num_test_trials,
+                        params=params,
+                        chooser_params=chooser_params,
+                    )
+                    bc.plotter.record_data(
+                        {"avg_score": mean_score, "std_dev": std_dev}
+                    )
+                else:
+                    bc.load_network(epoch_num)

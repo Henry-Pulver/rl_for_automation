@@ -10,6 +10,7 @@ from action_chooser import ActionChooser
 from buffer import DemonstrationBuffer, GAILExperienceBuffer
 from discriminator import Discriminator, DiscrimParams
 from PPO import PPO
+from trainer import Trainer, RunLogger
 from utils import generate_save_location, generate_gail_str
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -79,7 +80,9 @@ def sample_from_buffers(
     learner_action_vectors = torch.zeros((learner_actions.shape[0], action_space)).to(
         device
     )
-    learner_action_vectors[torch.arange(learner_actions.shape[0]), learner_actions] = action_one_hot_value
+    learner_action_vectors[
+        torch.arange(learner_actions.shape[0]), learner_actions
+    ] = action_one_hot_value
     learner_tuples = torch.cat((learner_states, learner_action_vectors), dim=1)
 
     num_expert_samples = int(
@@ -98,7 +101,9 @@ def sample_from_buffers(
     expert_action_vectors = torch.zeros((expert_actions.shape[0], action_space)).to(
         device
     )
-    expert_action_vectors[torch.arange(expert_actions.shape[0]), expert_actions] = action_one_hot_value
+    expert_action_vectors[
+        torch.arange(expert_actions.shape[0]), expert_actions
+    ] = action_one_hot_value
     expert_tuples = torch.cat((expert_states, expert_action_vectors), dim=1)
 
     data_set = torch.cat((learner_tuples, expert_tuples), dim=0)
@@ -245,6 +250,167 @@ class GAIL(PPO):
         self.discriminator.load_state_dict(net)
 
 
+class GAILTrainer(Trainer):
+    def train(
+        self,
+        demo_path: Path,
+        policy_params: namedtuple,
+        discrim_params: DiscrimParams,
+        max_episodes: int,
+        log_interval: int,
+        hyp: HyperparametersGAIL,
+        random_seeds: List,
+        max_timesteps: Optional[int] = None,
+        render: bool = False,
+        ppo_type: str = "clip",
+        adv_type: str = "monte_carlo",
+        param_plot_num: int = 10,
+        policy_burn_in: int = 0,
+        chooser_params: Tuple = (None, None, None),
+        restart: bool = False,
+        worst_performance: Optional[int] = None,
+        demo_avg_reward: Optional[float] = None,
+        action_one_hot_value: float = 1.0,
+        log_type: str = "legacy",
+        verbose: bool = False,
+    ):
+        try:
+            episode_numbers = []
+            random_seeds = random_seeds if random_seeds is not None else [0]
+            for random_seed in random_seeds:
+                self.set_seed(random_seed)
+
+                buffer = GAILExperienceBuffer(self.state_dim, self.action_dim)
+                demo_buffer = DemonstrationBuffer(
+                    demo_path, self.state_dim, self.action_dim
+                )
+
+                save_path = generate_save_location(
+                    Path("data"),
+                    policy_params.actor_layers,
+                    f"GAIL-{ppo_type}",
+                    self.env_name,
+                    random_seed,
+                    generate_gail_str(ppo_type, hyp),
+                    self.date,
+                )
+                self.restart(save_path, restart)
+
+                gail = GAIL(
+                    state_dimension=self.state_dim,
+                    action_space=self.action_dim,
+                    hyp=hyp,
+                    save_path=save_path,
+                    ppo_type=ppo_type,
+                    adv_type=adv_type,
+                    policy_params=policy_params,
+                    discriminator_params=discrim_params,
+                    param_plot_num=param_plot_num,
+                    policy_burn_in=policy_burn_in,
+                    verbose=verbose,
+                )
+
+                # logging variables
+                run_logger = RunLogger(max_episodes, log_type, 0.99, verbose)
+                update_timestep = 0
+                action_chooser = ActionChooser(*chooser_params, self.action_dim)
+                ep_num_start = gail.plotter.get_count("episode_num")
+                possible_demos = gail.plotter.determine_demo_nums(
+                    demo_path, hyp.num_demos
+                )
+
+                self.get_demo_avg_reward(
+                    hyp, demo_avg_reward, possible_demos, demo_path
+                )
+
+                # training loop
+                print(f"Starting running from episode number {ep_num_start + 1}\n")
+                worst_performance_count = 0
+                for ep_num in range(ep_num_start + 1, max_episodes + 1):
+                    state = self.env.reset()
+                    action_chooser.reset()
+                    for t in range(max_timesteps):
+                        update_timestep += 1
+
+                        # Running policy_old:
+                        action = gail.policy_old.act(state, buffer)
+                        action = action_chooser.step(action)
+                        state, reward, done, _ = self.env.step(action)
+
+                        # Saving reward and is_terminal:
+                        buffer.rewards.append(reward)
+                        buffer.is_terminal.append(done)
+
+                        # Update if its time
+                        if update_timestep % hyp.batch_size == 0:
+                            buffer = sample_from_buffers(
+                                demo_buffer,
+                                buffer,
+                                hyp.fraction_expert,
+                                self.action_dim,
+                                possible_demos,
+                                hyp.num_discrim_epochs,
+                                action_one_hot_value,
+                            )
+                            gail.update(buffer, ep_num)
+                            buffer.clear()
+                            update_timestep = 0
+
+                        run_logger.update(1, reward)
+                        if render:
+                            self.env.render()
+                        if done:
+                            break
+
+                    gail.plotter.record_data(
+                        {
+                            "rewards": run_logger.ep_reward,
+                            "num_steps_taken": t,
+                            "episode_num": 1,
+                        }
+                    )
+                    run_logger.end_episode()
+
+                    # logging
+                    if ep_num % log_interval == 0:
+                        run_logger.output_logs(ep_num, log_interval)
+                        gail.save()
+
+                        # stop training if avg_reward > solved_reward
+                        if run_logger > self.solved_reward:
+                            print("########## Solved! ##########")
+                            break
+                        elif worst_performance is not None:
+                            if run_logger.avg_reward <= worst_performance:
+                                worst_performance_count += 1
+                                if worst_performance_count >= 20:
+                                    break
+                            else:
+                                worst_performance_count = 0
+                episode_numbers.append(ep_num)
+            print(f"episode_numbers: {episode_numbers}")
+            return episode_numbers
+        except KeyboardInterrupt as interrupt:
+            gail.save()
+            raise interrupt
+
+    def get_demo_avg_reward(self, hyp, demo_avg_reward, possible_demos, demo_path):
+        if demo_avg_reward is None:
+            returns = []
+            for demo_num in possible_demos:
+                rewards = np.load(
+                    f"{demo_path}/{demo_num}/rewards.npy", allow_pickle=True
+                )
+                returns.append(np.sum(rewards))
+            exp_returns = np.mean(returns)
+        else:
+            exp_returns = demo_avg_reward
+        success_frac = hyp.success_margin / 100  # From % to fraction
+        self.solved_reward = exp_returns - abs(success_frac * exp_returns)
+        print(f"Demo avg reward: {exp_returns}")
+        print(f"Solved reward: {self.solved_reward}")
+
+
 def train_gail(
     demo_path: Path,
     env_name: str,
@@ -318,9 +484,9 @@ def train_gail(
             running_reward = 0
             avg_length = 0
             timestep = 0
-            possible_demos = gail.plotter.determine_demo_nums(demo_path, hyp.num_demos)
             action_chooser = ActionChooser(*chooser_params, action_space)
             ep_num_start = gail.plotter.get_count("episode_num")
+            possible_demos = gail.plotter.determine_demo_nums(demo_path, hyp.num_demos)
 
             if demo_avg_reward is None:
                 returns = []
