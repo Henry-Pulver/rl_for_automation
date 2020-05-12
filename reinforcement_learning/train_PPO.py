@@ -26,9 +26,8 @@ def main():
     random_seeds = list(range(args.num_seeds))
     nn_layers = (args.neurons_per_layer,) * args.num_layers
     learning_rate = args.lr if args.lr is not None else 2e-3
+    load_path = Path(args.load_path) if args.load_path is not None else None
     # chooser_params = (100, 1, 100)
-
-    date = args.date
 
     outer_outcomes = []
     try:
@@ -56,13 +55,14 @@ def main():
             env_names, solved_rewards, worst_scores
         ):
             outcomes.append(env_name)
-            trainer = PPOTrainer(env_name, Path(args.save_base_path), date=date)
+            trainer = PPOTrainer(env_name, Path(args.save_base_path), date=args.date)
             outcomes.append(
                 trainer.train(
                     solved_reward=solved_reward,
                     hyp=hyp,
                     actor_critic_params=actor_critic_params,
                     random_seeds=random_seeds,
+                    load_path=load_path,
                     log_interval=args.log_interval,
                     max_episodes=max_episodes,
                     max_timesteps=args.max_timesteps,

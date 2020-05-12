@@ -159,14 +159,13 @@ def main():
         [args.solved_reward] if args.solved_reward is not None else [195, -80, -135]
     )  # stop training if avg_reward > solved_reward
 
-    date = args.date
-    save_base_path = Path(args.save_base_path)
+    load_path = Path(args.load_path) if args.load_path is not None else None
 
     outcomes = []
     try:
         for env_name, solved_reward in zip(env_names, solved_rewards):
             outcomes.append(env_name)
-            trainer = REINFORCETrainer(env_name, save_base_path, date=date)
+            trainer = REINFORCETrainer(env_name, Path(args.save_base_path), date=args.date)
             outcomes.append(adv_type)
             outcomes.append(
                 trainer.train(
@@ -174,6 +173,7 @@ def main():
                     hyp=hyp,
                     actor_critic_params=actor_critic_params,
                     random_seeds=random_seeds,
+                    load_path=load_path,
                     log_interval=args.log_interval,  # print avg reward in the interval
                     max_episodes=max_episodes,
                     max_timesteps=args.max_timesteps,  # max timesteps in one episode

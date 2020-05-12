@@ -68,6 +68,11 @@ def get_base_parser(*args, **kwargs):
     parser.add_argument(
         "--save_base_path", type=str, help="base path to save plots", default="data"
     )
+    parser.add_argument(
+        "--load_path",
+        type=str,
+        help="path to network that will be loaded",
+    )
     parser.add_argument("--lr", type=float, help="learning rate used")
     parser.add_argument(
         "--param_plot_num", type=int, help="number of params to plot", default=10
