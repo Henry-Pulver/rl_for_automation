@@ -1,8 +1,7 @@
-import datetime
 from pathlib import Path
 
-from PPO import HyperparametersPPO, PPOTrainer
-from actor_critic import ActorCriticParams
+from algorithms.PPO import HyperparametersPPO, PPOTrainer
+from algorithms.actor_critic import ActorCriticParams
 
 
 def main():
@@ -23,7 +22,7 @@ def main():
     beta_values = [1]
     # chooser_params = (100, 1, 100)
 
-    date = datetime.date.today().strftime("%d-%m-%Y")
+    date =
 
     outer_outcomes = []
     try:

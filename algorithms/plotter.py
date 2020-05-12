@@ -4,8 +4,8 @@ from collections import namedtuple
 from pathlib import Path
 from typing import Tuple, List, Dict, Optional
 
-from actor_critic import ActorCriticParams
-from discriminator import DiscrimParams
+from algorithms.actor_critic import ActorCriticParams
+from algorithms.discriminator import DiscrimParams
 
 
 class Count:

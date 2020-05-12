@@ -5,8 +5,8 @@ from typing import Tuple, Optional
 from torch.distributions import Categorical
 from collections import namedtuple
 
-from buffer import PPOExperienceBuffer
-from utils import get_activation
+from algorithms.buffer import PPOExperienceBuffer
+from algorithms.utils import get_activation
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

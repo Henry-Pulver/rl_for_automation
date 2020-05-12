@@ -1,10 +1,10 @@
-from functools import reduce
 import operator
 import datetime
-from pathlib import Path
-from typing import Tuple, Optional
 import torch.nn as nn
 from collections import namedtuple
+from functools import reduce
+from pathlib import Path
+from typing import Tuple, Optional
 
 
 def prod(iterable):

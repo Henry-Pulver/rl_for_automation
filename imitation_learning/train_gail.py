@@ -1,13 +1,15 @@
 import datetime
 from pathlib import Path
+from argparse import ArgumentParser
 
-from discrete_policy import DiscretePolicyParams
-from actor_critic import ActorCriticParams
-from discriminator import DiscrimParams
-from imitation_learning.GAIL import HyperparametersGAIL, GAILTrainer
+from algorithms.discrete_policy import DiscretePolicyParams
+from algorithms.actor_critic import ActorCriticParams
+from algorithms.discriminator import DiscrimParams
+from algorithms.imitation_learning.GAIL import HyperparametersGAIL, GAILTrainer
 
 
 def main():
+    parser = ArgumentParser
     env_names = [
         "CartPole-v1",
         "Acrobot-v1",
@@ -32,9 +34,6 @@ def main():
     demo_path = Path("expert_demos")
     num_demos = [100, 30, 10]
     restart = True
-
-    date = datetime.date.today().strftime("%d-%m-%Y")
-    # date = "26-01-1998"
 
     outer_outcomes = []
     try:

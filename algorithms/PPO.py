@@ -1,23 +1,21 @@
 import numpy as np
-import gym
 import torch
 import torch.nn as nn
 from torch.functional import F
-from shutil import rmtree
 from collections import namedtuple
 from copy import deepcopy
 from pathlib import Path
 from typing import Tuple, List, Optional
 
-from action_chooser import ActionChooser
-from actor_critic import ActorCritic, ActorCriticParams
-from discrete_policy import DiscretePolicy
-from discriminator import DiscrimParams
-from advantage_estimation import get_td_error, get_gae
-from buffer import PPOExperienceBuffer
-from plotter import Plotter
-from trainer import Trainer, RunLogger
-from utils import generate_save_location, generate_ppo_hyp_str
+from algorithms.action_chooser import ActionChooser
+from algorithms.actor_critic import ActorCritic, ActorCriticParams
+from algorithms.discrete_policy import DiscretePolicy
+from algorithms.discriminator import DiscrimParams
+from algorithms.advantage_estimation import get_td_error, get_gae
+from algorithms.buffer import PPOExperienceBuffer
+from algorithms.plotter import Plotter
+from algorithms.trainer import Trainer, RunLogger
+from algorithms.utils import generate_save_location, generate_ppo_hyp_str
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -428,151 +426,3 @@ class PPOTrainer(Trainer):
         except KeyboardInterrupt as interrupt:
             ppo.save()
             raise interrupt
-
-
-def train_ppo(
-    env_name: str,
-    max_episodes: int,
-    log_interval: int,
-    hyp: HyperparametersPPO,
-    actor_critic_params: ActorCriticParams,
-    solved_reward: float,
-    random_seeds: List,
-    load_path: Optional[str] = None,
-    max_timesteps: Optional[int] = None,
-    render: bool = False,
-    verbose: bool = False,
-    ppo_type: str = "clip",
-    advantage_type: str = "monte_carlo_baseline",
-    date: Optional[str] = None,
-    param_plot_num: int = 2,
-    policy_burn_in: int = 0,
-    chooser_params: Tuple = (None, None, None),
-    restart: bool = False,
-    action_space: Optional[List] = None,
-    worst_performance: Optional[int] = None,
-):
-    try:
-        env = gym.make(env_name).env
-        state_dim = env.observation_space.shape
-        action_dim = env.action_space.n if action_space is None else len(action_space)
-
-        episode_numbers = []
-        for random_seed in random_seeds:
-            if random_seed is not None:
-                torch.manual_seed(random_seed)
-                env.seed(random_seed)
-                print(f"Set random seed to: {random_seed}")
-
-            buffer = PPOExperienceBuffer(state_dim, action_dim)
-
-            hyp_str = generate_ppo_hyp_str(ppo_type, hyp)
-            save_path = generate_save_location(
-                Path("data"),
-                actor_critic_params.actor_layers,
-                f"PPO-{ppo_type}",
-                env_name,
-                random_seed,
-                hyp_str,
-                date,
-            )
-            if restart:
-                if save_path.exists():
-                    print("Old data removed!")
-                    rmtree(save_path)
-
-            ppo = PPO(
-                state_dimension=state_dim,
-                action_space=action_dim,
-                policy_params=actor_critic_params,
-                hyperparameters=hyp,
-                save_path=save_path,
-                ppo_type=ppo_type,
-                advantage_type=advantage_type,
-                param_plot_num=param_plot_num,
-                policy_burn_in=policy_burn_in,
-                verbose=verbose,
-            )
-            if load_path is not None:
-                ppo.policy.load_state_dict(torch.load(load_path))
-
-            # logging variables
-            avg_length = 0
-            timestep = 0  # Determines when to update the network
-            running_reward = 0
-            action_chooser = ActionChooser(*chooser_params, action_space)
-            ep_num_start = ppo.plotter.get_count("episode_num")
-
-            # training loop
-            print(f"Starting running from episode number {ep_num_start + 1}\n")
-            worst_performance_count = 0
-            for ep_num in range(ep_num_start + 1, max_episodes + 1):  # Run episodes
-                state = env.reset()
-                ep_total_reward = 0
-                t = 0
-                action_chooser.reset()
-                keep_running = True if max_timesteps is None else t < max_timesteps
-                while keep_running:  # Run 1 episode
-                    timestep += 1
-                    t += 1
-                    keep_running = True if max_timesteps is None else t < max_timesteps
-
-                    # Running policy_old:
-                    action = ppo.policy_old.act(state, buffer)
-                    action = action_chooser.step(action)
-                    state, reward, done, _ = env.step(action)
-
-                    # Saving reward and is_terminal:
-                    buffer.rewards.append(reward)
-                    buffer.is_terminal.append(done)
-
-                    # update if its time
-                    if timestep % hyp.T == 0:
-                        ppo.update(buffer, ep_num)
-                        buffer.clear()
-                        timestep = 0
-
-                    ep_total_reward += reward
-                    if render:
-                        env.render()
-                    if done:
-                        break
-
-                avg_length += t / log_interval
-                running_reward += ep_total_reward / log_interval
-                ppo.plotter.record_data(
-                    {"rewards": ep_total_reward, "num_steps_taken": t, "episode_num": 1}
-                )
-
-                ep_str = ("{0:0" + f"{len(str(max_episodes))}" + "d}").format(ep_num)
-                if verbose:
-                    print(
-                        f"Episode {ep_str} of {max_episodes}. \t Total reward = {ep_total_reward}"
-                    )
-
-                if ep_num % log_interval == 0:
-                    print(
-                        f"Episode {ep_str} of {max_episodes}. \t Avg length: {int(avg_length)} \t Reward: {np.round(running_reward, 1)}"
-                    )
-                    ppo.save()
-
-                    # stop training if avg_reward > solved_reward
-                    if running_reward > solved_reward:
-                        print("########## Solved! ##########")
-                        break
-                    elif worst_performance is not None:
-                        if running_reward <= worst_performance:
-                            worst_performance_count += 1
-                            if worst_performance_count >= 20:
-                                print("BREAK AS NOT LEARNING")
-                                break
-                        else:
-                            worst_performance_count = 0
-                    running_reward = 0
-                    avg_length = 0
-            episode_numbers.append(ep_num)
-        print(f"episode_numbers: {episode_numbers}")
-        return episode_numbers
-    except KeyboardInterrupt as interrupt:
-        ppo.save()
-        raise interrupt

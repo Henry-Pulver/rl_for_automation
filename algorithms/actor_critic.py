@@ -5,8 +5,8 @@ from torch.distributions import Categorical
 from collections import namedtuple
 from typing import Tuple
 
-from discrete_policy import DiscretePolicy, DiscretePolicyParams
-from utils import get_activation
+from algorithms.discrete_policy import DiscretePolicy, DiscretePolicyParams
+from algorithms.utils import get_activation
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
