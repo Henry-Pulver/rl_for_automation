@@ -4,11 +4,11 @@ from pathlib import Path
 
 from algorithms.PPO import HyperparametersPPO, PPOTrainer
 from algorithms.actor_critic import ActorCriticParams
-from algorithms.parser import get_actor_critic_parser
+from algorithms.parser import get_ppo_parser
 
 
 def main():
-    parser = get_actor_critic_parser(description="Parser for PPO")
+    parser = get_ppo_parser(description="Parser for PPO")
     args = parser.parse_args()
 
     env_names = (
