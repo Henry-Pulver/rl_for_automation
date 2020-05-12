@@ -1,6 +1,39 @@
 from argparse import ArgumentParser
 
 
+def get_ppo_parser(*args, **kwargs):
+    parser = get_actor_critic_parser(*args, **kwargs)
+    parser.add_argument(
+        "--ppo_type",
+        type=str,
+        help="PPO variant to use",
+        default="clip",
+        choise=["clip", "unclipped", "fixed_KL", "adaptive_KL"],
+    )
+    parser.add_argument(
+        "--epsilon", type=float, help="PPO clipping param", default=0.2,
+    )
+    parser.add_argument(
+        "--beta", type=float, help="PPO fixed KL param", default=0.003,
+    )
+    parser.add_argument(
+        "--d_targ", type=float, help="PPO adaptive KL param", default=0.01,
+    )
+    parser.add_argument(
+        "--entropy_coeff", type=float, help="entropy coefficient param", default=0.01,
+    )
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        help="number of epochs to train each T timesteps",
+        default=3,
+    )
+    parser.add_argument(
+        "--T", type=int, help="number of timeseps between updates", default=0.5,
+    )
+    return parser
+
+
 def get_actor_critic_parser(*args, **kwargs):
     parser = get_base_parser(*args, **kwargs)
     parser.add_argument(
@@ -19,6 +52,14 @@ def get_actor_critic_parser(*args, **kwargs):
     parser.add_argument(
         "--lamda", type=float, help="GAE lambda value", default=0.95,
     )
+    parser.add_argument(
+        "--value_coeff", type=float, help="value coefficient param", default=0.5,
+    )
+    parser.add_argument(
+        "--worst_score",
+        type=float,
+        help="used to determine if unstable - the worst score possible in the env",
+    )
     return parser
 
 
@@ -36,6 +77,9 @@ def get_base_parser(*args, **kwargs):
         type=int,
         help="number of steps between logging score",
         default=20,
+    )
+    parser.add_argument(
+        "--log_type", type=str, help="type of logging to use", default="legacy",
     )
     parser.add_argument(
         "--num_seeds", type=int, help="num of random seeds used", default=5

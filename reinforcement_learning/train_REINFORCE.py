@@ -3,14 +3,12 @@
 import torch
 from typing import Optional, List, Tuple
 from pathlib import Path
-import sys
 
-# sys.path.append(".")
 from algorithms.PPO import HyperparametersPPO, PPO
 from algorithms.actor_critic import ActorCriticParams
 from algorithms.action_chooser import ActionChooser
 from algorithms.buffer import PPOExperienceBuffer
-from algorithms.parser import get_base_parser
+from algorithms.parser import get_actor_critic_parser
 from algorithms.trainer import Trainer, RunLogger
 from algorithms.utils import generate_save_location
 
@@ -128,12 +126,12 @@ class REINFORCETrainer(Trainer):
 
 
 def main():
-    parser = get_base_parser(description="Parser for REINFORCE algorithm")
+    parser = get_actor_critic_parser(description="Parser for REINFORCE algorithm")
     args = parser.parse_args()
     max_episodes = args.max_episodes if args.max_episodes is not None else 1000000
     random_seeds = list(range(args.num_seeds))
     adv_type = args.adv_type
-    nn_layers = (args.neurons_per_layer, ) * args.num_layers
+    nn_layers = (args.neurons_per_layer,) * args.num_layers
     actor_critic_params = ActorCriticParams(
         actor_layers=nn_layers,
         actor_activation=args.activation,
@@ -147,13 +145,19 @@ def main():
         lamda=args.lamda,  # GAE weighting factor
         learning_rate=learning_rate,
         epsilon=10000,  # clip parameter for PPO
-        c1=0.5,  # value function hyperparam
+        c1=args.value_coeff,  # value function hyperparam
         c2=0,  # entropy hyperparam
         num_epochs=1,  # update policy for K epochs
     )
 
-    env_names = [args.env_name] if args.env_name is not None else ["CartPole-v1", "Acrobot-v1", "MountainCar-v0"]
-    solved_rewards = [args.solved_reward] if args.solved_reward is not None else [195, -80, -135]  # stop training if avg_reward > solved_reward
+    env_names = (
+        [args.env_name]
+        if args.env_name is not None
+        else ["CartPole-v1", "Acrobot-v1", "MountainCar-v0"]
+    )
+    solved_rewards = (
+        [args.solved_reward] if args.solved_reward is not None else [195, -80, -135]
+    )  # stop training if avg_reward > solved_reward
 
     date = args.date
     save_base_path = Path(args.save_base_path)
@@ -172,7 +176,7 @@ def main():
                     random_seeds=random_seeds,
                     log_interval=args.log_interval,  # print avg reward in the interval
                     max_episodes=max_episodes,
-                    max_timesteps=args.max_episodes,  # max timesteps in one episode
+                    max_timesteps=args.max_timesteps,  # max timesteps in one episode
                     advantage_type=adv_type,
                     param_plot_num=args.param_plot_num,
                     restart=args.r,

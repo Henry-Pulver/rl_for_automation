@@ -1,81 +1,81 @@
+#!/usr/bin/env python3
+
 from pathlib import Path
 
 from algorithms.PPO import HyperparametersPPO, PPOTrainer
 from algorithms.actor_critic import ActorCriticParams
+from algorithms.parser import get_actor_critic_parser
 
 
 def main():
-    # env_names = ["CartPole-v1", "Acrobot-v1", "MountainCar-v0"]
-    # env_names = ["MountainCar-v0", "Acrobot-v1"]
-    env_names = ["Acrobot-v1"]
-    # solved_rewards = [195, -80, -135]  # stop training if avg_reward > solved_reward
-    solved_rewards = [-135, -80]  # stop training if avg_reward > solved_reward
-    worst_scores = [-10000, -10000]
-    # worst_scores = [-10000]
-    log_interval = 20  # print avg reward in the interval
-    max_episodes = 10000  # max training episodes
-    max_timesteps = 10000  # max timesteps in one episode
-    random_seeds = list(range(5))
-    ppo_type = "fixed_KL"
-    adv_type = "monte_carlo_baseline"
-    clip_param = 0.2
-    beta_values = [1]
+    parser = get_actor_critic_parser(description="Parser for PPO")
+    args = parser.parse_args()
+
+    env_names = (
+        [args.env_name]
+        if args.env_name is not None
+        else ["CartPole-v1", "Acrobot-v1", "MountainCar-v0"]
+    )
+    solved_rewards = (
+        [args.solved_reward] if args.solved_reward is not None else [195, -80, -135]
+    )  # stop training if avg_reward > solved_reward
+    worst_scores = (
+        [args.worst_score] if args.worst_score is not None else [9, -10000, -10000]
+    )
+    max_episodes = args.max_episodes if args.max_episodes is not None else 1000000
+    random_seeds = list(range(args.num_seeds))
+    nn_layers = (args.neurons_per_layer,) * args.num_layers
+    learning_rate = args.lr if args.lr is not None else 2e-3
     # chooser_params = (100, 1, 100)
 
-    date =
+    date = args.date
 
     outer_outcomes = []
     try:
-        for beta in beta_values:
-            actor_critic_params = ActorCriticParams(
-                actor_layers=(32, 32),
-                actor_activation="tanh",
-                critic_layers=(32, 32),
-                critic_activation="tanh",
-                num_shared_layers=0,
-            )
-            # if num_shared in [1, 0]:
-            #     random_seeds = random_seeds[5:]
-            # outer_outcomes.append(f"num_shared: {num_shared}")
-            hyp = HyperparametersPPO(
-                gamma=0.99,  # discount factor
-                # lamda=0.95,  # GAE weighting factor
-                learning_rate=2e-3,
-                T=1024,  # update policy every n timesteps
-                # epsilon=clip_param,  # clip parameter for PPO
-                c1=0.5,  # value function hyperparam
-                c2=0.01,  # entropy hyperparam
-                num_epochs=3,  # update policy for K epochs
-                # d_targ=d_targ,          # adaptive KL param
-                beta=beta,  # fixed KL param
-            )
-            outcomes = []
-            for env_name, solved_reward, worst in zip(
-                env_names, solved_rewards, worst_scores
-            ):
-                outcomes.append(env_name)
-                outcomes.append(beta)
-                trainer = PPOTrainer(
-                    env_name=env_name, save_base_path=Path("data"), date=date,
+        actor_critic_params = ActorCriticParams(
+            actor_layers=nn_layers,
+            actor_activation=args.activation,
+            critic_layers=nn_layers,
+            critic_activation=args.activation,
+            num_shared_layers=args.num_shared_layers,
+        )
+        hyp = HyperparametersPPO(
+            gamma=0.99,  # discount factor
+            lamda=args.lamda,  # GAE weighting factor
+            learning_rate=learning_rate,
+            T=args.T,  # update policy every n timesteps
+            c1=args.value_coeff,  # value function hyperparam
+            c2=args.entropy_coeff,  # entropy hyperparam
+            num_epochs=args.num_epochs,  # update policy for K epochs
+            epsilon=args.epsilon,  # clip parameter for PPO
+            d_targ=args.d_targ,  # adaptive KL param
+            beta=args.beta,  # fixed KL param
+        )
+        outcomes = []
+        for env_name, solved_reward, worst in zip(
+            env_names, solved_rewards, worst_scores
+        ):
+            outcomes.append(env_name)
+            trainer = PPOTrainer(env_name, Path(args.save_base_path), date=date)
+            outcomes.append(
+                trainer.train(
+                    solved_reward=solved_reward,
+                    hyp=hyp,
+                    actor_critic_params=actor_critic_params,
+                    random_seeds=random_seeds,
+                    log_interval=args.log_interval,
+                    max_episodes=max_episodes,
+                    max_timesteps=args.max_timesteps,
+                    ppo_type=args.ppo_type,
+                    advantage_type=args.adv_type,
+                    param_plot_num=args.param_plot_num,
+                    worst_performance=worst,
+                    restart=args.r,
+                    verbose=args.v,
+                    # policy_burn_in=0,
                 )
-                outcomes.append(
-                    trainer.train(
-                        solved_reward=solved_reward,
-                        hyp=hyp,
-                        actor_critic_params=actor_critic_params,
-                        random_seeds=random_seeds,
-                        log_interval=log_interval,
-                        max_episodes=max_episodes,
-                        max_timesteps=max_timesteps,
-                        ppo_type=ppo_type,
-                        advantage_type=adv_type,
-                        param_plot_num=10,
-                        restart=True,
-                        worst_performance=worst,
-                        # policy_burn_in=0,
-                    )
-                )
-            outer_outcomes.append(outcomes)
+            )
+        outer_outcomes.append(outcomes)
     finally:
         print(f"outcomes:")
         for outer_outcome in outer_outcomes:
