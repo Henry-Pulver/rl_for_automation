@@ -217,3 +217,4 @@ class BCTrainer(Trainer):
                     )
                 else:
                     bc.load_network(epoch_num)
+            bc.plotter.save_plots()
