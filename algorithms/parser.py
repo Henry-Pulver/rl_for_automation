@@ -8,7 +8,7 @@ def get_ppo_parser(*args, **kwargs):
         type=str,
         help="PPO variant to use",
         default="clip",
-        choise=["clip", "unclipped", "fixed_KL", "adaptive_KL"],
+        choices=["clip", "unclipped", "fixed_KL", "adaptive_KL"],
     )
     parser.add_argument(
         "--epsilon", type=float, help="PPO clipping param", default=0.2,
@@ -29,7 +29,7 @@ def get_ppo_parser(*args, **kwargs):
         default=3,
     )
     parser.add_argument(
-        "--T", type=int, help="number of timeseps between updates", default=0.5,
+        "--T", type=int, help="number of timeseps between updates", default=1024,
     )
     return parser
 
