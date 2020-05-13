@@ -23,7 +23,7 @@ def main():
         [args.worst_score] if args.worst_score is not None else [9, -10000, -10000]
     )
     max_episodes = args.max_episodes if args.max_episodes is not None else 1000000
-    random_seeds = list(range(args.num_seeds))
+    random_seeds = list(args.random_seeds)
     nn_layers = (args.neurons_per_layer,) * args.num_layers
     learning_rate = args.lr if args.lr is not None else 2e-3
     load_path = Path(args.load_path) if args.load_path is not None else None

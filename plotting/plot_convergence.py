@@ -1,10 +1,28 @@
 import numpy as np
 import plotly.graph_objects as go
 import os
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from pathlib import Path
 
 from algorithms.utils import generate_save_location
+
+PLOTLY_DEFAULT_COLOURS = ['#1f77b4',  # muted blue
+                          '#ff7f0e',  # safety orange
+                          '#2ca02c',  # cooked asparagus green
+                          '#d62728',  # brick red
+                          '#9467bd',  # muted purple
+                          '#8c564b',  # chestnut brown
+                          '#e377c2',  # raspberry yogurt pink
+                          '#7f7f7f',  # middle gray
+                          '#bcbd22',  # curry yellow-green
+                          '#17becf' ] # blue-teal
+
+PLOTLY_MUTED_COLOURS = ["rgba(31,119,180,0.4)",
+                        "rgba(255,127,14,0.4)",
+                        "rgba(44,160,44,0.4)",
+                        "rgba(214,39,40,0.4)",
+                        "rgba(148,103,189,0.4)",
+                        "rgba(140,86,75,0.4)",]
 
 
 def print_counts(load_path: Path, counts: List):
@@ -33,47 +51,63 @@ def plot_data(
     plot: np.array,
     plot_name: str,
     load_path: Path,
-    reward_smoothing_weight: Optional[float] = None,
+    smoothing_weight: Optional[float] = None,
     graph_labels: Optional[Dict] = None,
     plot_smoothed: bool = False,
+    std_devs: Optional[np.array] = None,
+    std_dev_limits: Tuple = (None, 1000000),
 ):
-    graph_labels = (
-        {"Title": "", "x": "", "y": "", "Legend": [""]}
-        if graph_labels is None
-        else graph_labels
-    )
-
-    fig = go.Figure()
-    x = np.linspace(0, plot.shape[-1], plot.shape[-1] + 1)
-
-    # If it has multiple plots
-    if len(plot.shape) > 1:
-        if not len(plot) == len(graph_labels["Legend"]):
-            graph_labels["Legend"] = [""] * len(plot)
-        for count, theta in enumerate(plot):
-            fig.add_trace(go.Scatter(x=x, y=theta, name=graph_labels["Legend"][count]))
-    else:
-        fig.add_trace(go.Scatter(x=x, y=plot))
-
-    fig.update_layout(
-        title=graph_labels["Title"],
-        xaxis_title=graph_labels["x"],
-        yaxis_title=graph_labels["y"],
-    )
-    fig.write_html(
-        f"{load_path}/{plot_name}.html", auto_open=True,
-    )
     if plot_smoothed:
-        fig2 = go.Figure()
-        smoothed_plot = smooth_rewards(plot, reward_smoothing_weight)
-        fig2.add_trace(go.Scatter(x=x, y=smoothed_plot))
-        fig2.update_layout(
+        assert smoothing_weight is not None
+    for smooth in {False, plot_smoothed}:
+        graph_labels = (
+            {"Title": "", "x": "", "y": "", "Legend": [""]}
+            if graph_labels is None
+            else graph_labels
+        )
+        smooth_string = "_smoothed" if smooth else ""
+
+        fig = go.Figure()
+        x = np.linspace(1, plot.shape[-1], plot.shape[-1])
+
+        # If it has multiple plots
+        if len(plot.shape) > 1:
+            show_legend = True
+            if not len(plot) == len(graph_labels["Legend"]):
+                graph_labels["Legend"] = [""] * len(plot)
+                show_legend = False
+
+        else:
+            plot = np.array([plot])
+            graph_labels["Legend"] = [""]
+            show_legend = False
+        for count, theta in enumerate(plot):
+            theta = smooth_rewards(theta, smoothing_weight) if smooth else theta
+            fig.add_trace(go.Scatter(x=x, y=theta, line_color=PLOTLY_DEFAULT_COLOURS[count], name=graph_labels["Legend"][count], showlegend=show_legend))
+            if std_devs is not None:
+                x_list = list(x)
+                x_rev = x_list[::-1]
+                y_upper = list(np.clip(theta + std_devs[count], std_dev_limits[0], std_dev_limits[1]))
+                y_lower = list(np.clip(theta - std_devs[count], std_dev_limits[0], std_dev_limits[1]))
+                y_rev = y_lower[::-1]
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_list + x_rev,
+                        y=y_upper + y_rev,
+                        fill='toself',
+                        line_color='rgba(0,0,0,0)',
+                        fillcolor=PLOTLY_MUTED_COLOURS[count],
+                        name=graph_labels["Legend"][count],
+                        showlegend=False,
+                    )
+                )
+        fig.update_layout(
             title=graph_labels["Title"],
             xaxis_title=graph_labels["x"],
             yaxis_title=graph_labels["y"],
         )
-        fig2.write_html(
-            f"{load_path}/{plot_name}_smoothed.html", auto_open=True,
+        fig.write_html(
+            f"{load_path}/{plot_name}{smooth_string}.html", auto_open=True,
         )
 
 
@@ -139,7 +173,7 @@ def plot_random_seed_avgs(
             np.mean(np.array(plot), axis=0),
             f"{plot_name}-seed-avg",
             load_path,
-            reward_smoothing_weight=reward_smoothing_weight,
+            smoothing_weight=reward_smoothing_weight,
             graph_labels=graph_labels,
         )
         graph_labels["Legend"] = [f"Seed: {seed}" for seed in seeds]
@@ -147,7 +181,7 @@ def plot_random_seed_avgs(
             np.array(plot),
             plot_name,
             load_path,
-            reward_smoothing_weight=reward_smoothing_weight,
+            smoothing_weight=reward_smoothing_weight,
             graph_labels=graph_labels,
         )
 
@@ -155,8 +189,12 @@ def plot_random_seed_avgs(
 def plot_demo_num_avgs(
     load_path: Path,
     arch_str: str,
-    plot_to_plot: str,
+    reward_plot_name: str,
+    std_dev_plot_name: Optional[str] = None,
     graph_labels: Optional[Dict] = None,
+    nums_to_plot: Optional[List] = None,
+    smoothing_factor: Optional[float] = None,
+    std_dev_limits: Tuple = (None, 1000000),
 ):
     nums_list = []
     for num_demos_path in load_path.iterdir():
@@ -178,32 +216,54 @@ def plot_demo_num_avgs(
                     hyp_prefix = num_demos_path.name[: 1 - nums_from_end]
                     nums_list.append(int(num_string))
                     break
+    nums_list = nums_to_plot if nums_to_plot is not None else nums_list
     nums_list = sorted(nums_list)
     print(nums_list)
     # Load in plots
     plots = [
         np.array(
             load_seed_plots(
-                load_path / f"{hyp_prefix}{num}" / arch_str, [plot_to_plot]
-            )[0][plot_to_plot]
+                load_path / f"{hyp_prefix}{num}" / arch_str, [reward_plot_name]
+            )[0][reward_plot_name]
         )
         for num in nums_list
     ]
 
-    graph_labels = {} if graph_labels is None else graph_labels
-    graph_labels["Legend"] = np.array([f"# demos used: {num}" for num in nums_list])
-
     # Cut short any unnecessarily long plots, take mean over random seeds
     for count, plot in enumerate(plots):
         plots[count] = np.mean(
-            np.array([seed[-len(min(plot, key=len)) :] for seed in plot]), axis=0
+            np.array([seed[-len(min(plot, key=len)):] for seed in plot]), axis=0
         )
+
+    if std_dev_plot_name is not None:
+        std_devs = [
+            np.array(
+                load_seed_plots(
+                    load_path / f"{hyp_prefix}{num}" / arch_str, [std_dev_plot_name]
+                )[0][std_dev_plot_name]
+            )
+            for num in nums_list
+        ]
+        vars = [std_dev ** 2 for std_dev in std_devs]
+        for count, var in enumerate(vars):
+            vars[count] = np.mean(
+                np.array([seed[-len(min(var, key=len)):] for seed in var]), axis=0
+            )
+
+    graph_labels = {} if graph_labels is None else graph_labels
+    graph_labels["Legend"] = np.array([f"# demos used: {num}" for num in nums_list])
+
+    std_devs = [var ** (1 / 2) for var in vars] if std_dev_plot_name is not None else None
 
     plot_data(
         plot=np.array(plots),
         plot_name="demo_num_plot",
         load_path=load_path,
         graph_labels=graph_labels,
+        std_devs=std_devs,
+        plot_smoothed=smoothing_factor is not None,
+        smoothing_weight=smoothing_factor,
+        std_dev_limits=std_dev_limits,
     )
 
 
@@ -424,101 +484,54 @@ def main():
     #         graph_labels=graph_labels,
     #         # plots_to_plot=["rewards"],
     #     )
-    # base_path = Path(f"../imitation_learning/data/BC/")
-    # seed = 1
+    base_path = Path(f"../reinforcement_learning/data/REINFORCE/Breakout-ram-v4/12-05-2020/hyp-REINFORCE/128-128-128-128")
+    seed = 0
     # # for seed in range(5):
-    # graph_labels = {
-    #     "Title": f"Mountain Car GAIL, Random Seed: {seed}",
-    #     "x": "",
-    #     # "x": "Episode number",
-    #     "y": "",
-    #     # "y": "Score",
-    #     "Legend": []
-    # }
-    # load_path = base_path / f"seed-{seed}"
-    # output_plots_and_counts(
-    #     load_path,
-    #     reward_smoothing_weight=0.99,
-    #     graph_labels=graph_labels,
-    #     # plots_to_plot=["rewards"],
-    # )
+    graph_labels = {
+        "Title": f"Breakout REINFORCE",
+        "x": "",
+        # "x": "Episode number",
+        "y": "",
+        # "y": "Score",
+        "Legend": []
+    }
+    load_path = base_path / f"seed-{seed}"
+    output_plots_and_counts(
+        load_path,
+        reward_smoothing_weight=0.99,
+        graph_labels=graph_labels,
+        # plots_to_plot=["rewards"],
+    )
 
     # BC plotting the effect of the number of demos
-    alg = "BC"
-    algorithm_name = "Behavioural Cloning"
-    env_names = [
-        "CartPole-v1",
-        "MountainCar-v0",
-        "Acrobot-v1",
-    ]
-    for env_name in env_names:
-        graph_labels = {
-            "Title": f"{algorithm_name} effect of number of demos on avg score for {env_name}",
-            "x": "Epochs trained",
-            "y": "Avg Score",
-        }
-        plot_demo_num_avgs(
-            load_path=Path(f"../imitation_learning/data/{alg}/{env_name}/09-05-2020/"),
-            arch_str="32-32",
-            plot_to_plot="avg_score",
-            graph_labels=graph_labels,
-        )
+    # alg = "BC"
+    # algorithm_name = "Behavioural Cloning"
+    # env_names = [
+    #     "CartPole-v1",
+    #     "MountainCar-v0",
+    #     "Acrobot-v1",
+    # ]
+    # for env_name in env_names:
+    #     graph_labels = {
+    #         "Title": f"{algorithm_name} effect of number of demos on avg score for {env_name}",
+    #         "x": "Epochs trained",
+    #         "y": "Avg Score",
+    #     }
+    #     plot_demo_num_avgs(
+    #         load_path=Path(f"../imitation_learning/data/{alg}/{env_name}/09-05-2020/"),
+    #         arch_str="32-32",
+    #         reward_plot_name="avg_score",
+    #         graph_labels=graph_labels,
+    #         # std_dev_plot_name="std_dev",
+    #         # nums_to_plot=[1, 100],
+    #         smoothing_factor=0.4,
+    #     )
 
     # plot_random_seed_avgs(
     #     Path("../imitation_learning/data/BC/CartPole-v1/23-04-2020/hyp-demos-1/32-32/"),
     #     ["avg_score", "epoch_loss"],
     # )
 
-    # plot_to_change = np.load(load_path)
-    # print(plot_to_change)
-    # print(plot_to_change.shape)
-    # plot_to_change = plot_to_change[20:]
-    # print(plot_to_change)
-    # print(plot_to_change.shape)
-    # np.save(f"{load_path}", plot_to_change)
-    # plot_to_change = np.load(load_path)
-    # print(plot_to_change)
-    # print(plot_to_change.shape)
-
-    # # for plot in plots:
-    # for entry in load_path.iterdir():
-    #     if entry.is_dir():
-    #         for filename in entry.iterdir():
-    #             print(filename)
-
-    # plot_reinforce_weights_and_performance(
-    #     ref_num=51,
-    #     opt=False,
-    #     feature_vector_size=(action_poly_order + 1) ** 2,
-    #     action_feature=False,
-    #     baseline=False,
-    # )
-
-    # plot_reinforce_concatenated_weights_and_performance(
-    #     ref_num_list=[40, 41],
-    #     opt=False,
-    #     feature_vector_size=(action_poly_order + 1) ** 2,
-    #     action_feature=False,
-    #     baseline=True
-    # )
-
-    # plot_run(ref_num=20, trial_num=800)
-
 
 if __name__ == "__main__":
     main()
-
-    # ADDING ERROR BAR STANDARD DEV
-    # fig = go.Figure()
-    # fig.add_trace(go.Scatter(x=[1, 2, 3, 4], y=[3, 4, 8, 3],
-    #                          fill=None,
-    #                          mode='lines',
-    #                          line_color='indigo',
-    #                          ))
-    # fig.add_trace(go.Scatter(
-    #     x=[1, 2, 3, 4],
-    #     y=[1, 6, 2, 6],
-    #     fill='tonexty',  # fill area between trace0 and trace1
-    #     mode='lines', line_color='indigo'))
-    # # fig.show()
-    # fig.write_html(f"test.html", auto_open=True)

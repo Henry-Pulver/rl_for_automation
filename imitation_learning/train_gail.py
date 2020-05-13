@@ -2,7 +2,6 @@
 
 import datetime
 from pathlib import Path
-from argparse import ArgumentParser
 
 from algorithms.discrete_policy import DiscretePolicyParams
 from algorithms.actor_critic import ActorCriticParams
@@ -11,7 +10,6 @@ from algorithms.imitation_learning.GAIL import HyperparametersGAIL, GAILTrainer
 
 
 def main():
-    parser = ArgumentParser
     env_names = [
         "CartPole-v1",
         "Acrobot-v1",

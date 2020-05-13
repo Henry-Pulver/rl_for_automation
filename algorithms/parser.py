@@ -69,9 +69,7 @@ def get_base_parser(*args, **kwargs):
         "--save_base_path", type=str, help="base path to save plots", default="data"
     )
     parser.add_argument(
-        "--load_path",
-        type=str,
-        help="path to network that will be loaded",
+        "--load_path", type=str, help="path to network that will be loaded",
     )
     parser.add_argument("--lr", type=float, help="learning rate used")
     parser.add_argument(
@@ -87,7 +85,7 @@ def get_base_parser(*args, **kwargs):
         "--log_type", type=str, help="type of logging to use", default="legacy",
     )
     parser.add_argument(
-        "--num_seeds", type=int, help="num of random seeds used", default=5
+        "--random_seeds", type=set, help="random seeds used", default={0, 1, 2, 3, 4}
     )
     parser.add_argument(
         "--max_episodes", type=int, help="the maximum number of episodes run"

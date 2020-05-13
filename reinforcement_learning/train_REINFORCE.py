@@ -129,7 +129,7 @@ def main():
     parser = get_actor_critic_parser(description="Parser for REINFORCE algorithm")
     args = parser.parse_args()
     max_episodes = args.max_episodes if args.max_episodes is not None else 1000000
-    random_seeds = list(range(args.num_seeds))
+    random_seeds = list(args.random_seeds)
     adv_type = args.adv_type
     nn_layers = (args.neurons_per_layer,) * args.num_layers
     actor_critic_params = ActorCriticParams(
@@ -165,7 +165,9 @@ def main():
     try:
         for env_name, solved_reward in zip(env_names, solved_rewards):
             outcomes.append(env_name)
-            trainer = REINFORCETrainer(env_name, Path(args.save_base_path), date=args.date)
+            trainer = REINFORCETrainer(
+                env_name, Path(args.save_base_path), date=args.date
+            )
             outcomes.append(adv_type)
             outcomes.append(
                 trainer.train(
@@ -190,5 +192,4 @@ def main():
 
 
 if __name__ == "__main__":
-
     main()
