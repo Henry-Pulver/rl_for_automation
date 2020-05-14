@@ -181,6 +181,7 @@ def main():
                     max_timesteps=args.max_timesteps,  # max timesteps in one episode
                     advantage_type=adv_type,
                     param_plot_num=args.param_plot_num,
+                    policy_burn_in=args.burn_in_steps,
                     restart=args.r,
                     verbose=args.v,
                 )

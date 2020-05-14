@@ -484,24 +484,25 @@ def main():
     #         graph_labels=graph_labels,
     #         # plots_to_plot=["rewards"],
     #     )
-    base_path = Path(f"../reinforcement_learning/data/REINFORCE/Breakout-ram-v4/12-05-2020/hyp-REINFORCE/128-128-128-128")
-    seed = 0
-    # # for seed in range(5):
-    graph_labels = {
-        "Title": f"Breakout REINFORCE",
-        "x": "",
-        # "x": "Episode number",
-        "y": "",
-        # "y": "Score",
-        "Legend": []
-    }
-    load_path = base_path / f"seed-{seed}"
-    output_plots_and_counts(
-        load_path,
-        reward_smoothing_weight=0.99,
-        graph_labels=graph_labels,
-        # plots_to_plot=["rewards"],
-    )
+    base_path = Path(f"../reinforcement_learning/data/pretrained-PPO-clip/Breakout-ram-v4/12-05-2020/hyp-0.2/128-128-128-128")
+    # seed = 0
+
+    for seed in range(5):
+        graph_labels = {
+            "Title": f"Breakout results for PPO pretrained with BC",
+            "x": "",
+            # "x": "Episode number",
+            "y": "",
+            # "y": "Score",
+            "Legend": []
+        }
+        load_path = base_path / f"seed-{seed}"
+        output_plots_and_counts(
+            load_path,
+            reward_smoothing_weight=0.99,
+            graph_labels=graph_labels,
+            plots_to_plot=["rewards"],
+        )
 
     # BC plotting the effect of the number of demos
     # alg = "BC"

@@ -70,9 +70,9 @@ def main():
                     advantage_type=args.adv_type,
                     param_plot_num=args.param_plot_num,
                     worst_performance=worst,
+                    policy_burn_in=args.burn_in_steps,
                     restart=args.r,
                     verbose=args.v,
-                    # policy_burn_in=0,
                 )
             )
         outer_outcomes.append(outcomes)

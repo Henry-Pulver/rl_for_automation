@@ -60,6 +60,7 @@ def get_actor_critic_parser(*args, **kwargs):
         type=float,
         help="used to determine if unstable - the worst score possible in the env",
     )
+    parser.add_argument("--burn_in_steps", type=int, help="number of burn in steps", default=0)
     return parser
 
 
