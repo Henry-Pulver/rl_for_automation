@@ -103,6 +103,7 @@ class Trainer:
         self.save_base_path = save_base_path
 
     def set_seed(self, random_seed: Optional[int]):
+        random_seed = int(random_seed)
         if random_seed is not None:
             torch.manual_seed(random_seed)
             self.env.seed(random_seed)

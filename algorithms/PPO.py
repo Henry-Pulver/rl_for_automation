@@ -235,7 +235,9 @@ class PPO:
                     np.squeeze(entropy_loss.mean().detach().cpu().numpy())
                 )
         else:
-            loss = torch.tensor([0], requires_grad=True, dtype=torch.float32).clone()
+            loss = torch.tensor(
+                [0], requires_grad=True, dtype=torch.float32, device=device
+            ).clone()
 
         if self.using_value:
             value_loss = self.hyp.c1 * self.MseLoss(state_values, norm_returns)
@@ -351,7 +353,7 @@ class PPOTrainer(Trainer):
                     verbose=verbose,
                 )
                 if load_path is not None:
-                    ppo.policy.load_state_dict(torch.load(load_path))
+                    ppo.policy.load_state_dict(torch.load(load_path), strict=False)
 
                 # logging variables
                 update_timestep = 0  # Determines when to update the network

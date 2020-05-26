@@ -10,7 +10,7 @@ from consts import (
     NUM_POSITIONS,
 )
 from REINFORCE_actions import Policy
-
+from algorithms.actor_critic import ActorCritic, ActorCriticParams
 
 def load_data(load_path: Path) -> np.array:
     if load_path.exists():
@@ -147,40 +147,59 @@ def main():
     #               )
 
     ##################### View stochastic policy ########################
-    ref_num = 2001
-    filename = "REINFORCE_actions_baseline_order_2"
-    load_path = f"mountain_car/REINFORCE_actions/weights/{ref_num}"
-    # load_path = f"mountain_car/REINFORCE_states/weights/human"
-    policy = Policy(
-        ref_num=0,
-        alpha_baseline=1,
-        alpha_policy=1,
-        policy_load=f"{load_path}/policy_weights_{ref_num}.npy",
-    )
-    z_data = np.array([policy.action_probs(state) for state in DISC_CONSTS.STATE_SPACE])
+    # ref_num = 2001
+    # filename = "REINFORCE_actions_baseline_order_2"
+    # load_path = f"mountain_car/REINFORCE_actions/weights/{ref_num}"
+    # # load_path = f"mountain_car/REINFORCE_states/weights/human"
+    # policy = Policy(
+    #     ref_num=0,
+    #     alpha_baseline=1,
+    #     alpha_policy=1,
+    #     policy_load=f"{load_path}/policy_weights_{ref_num}.npy",
+    # )
+    #
+    # z_data = np.array([policy.action_probs(state) for state in DISC_CONSTS.STATE_SPACE])
+    # final_data = np.array(
+    #     [action.reshape((NUM_VELOCITIES, NUM_POSITIONS)) for action in z_data.T]
+    # )
+
+    import torch
+    network_load = "../solved_networks/PPO_MountainCar-v0.pth"
+    arch = (32, 32)
+    act = "tanh"
+    params = ActorCriticParams(actor_layers=arch,
+                               critic_layers=arch,
+                               actor_activation=act,
+                               critic_activation=act,
+                               num_shared_layers=0)
+    policy = ActorCritic((2, ), 3,  params)
+    policy.load_state_dict(torch.load(network_load))
+
+    z_data = np.array([policy(torch.from_numpy(state).type(torch.float32)).detach().numpy() for state in DISC_CONSTS.STATE_SPACE])
+    print(z_data.shape)
+    print(z_data[0])
     final_data = np.array(
         [action.reshape((NUM_VELOCITIES, NUM_POSITIONS)) for action in z_data.T]
     )
-
-    # policy = cts_to_discrete(
-    #     z_data=final_data,
-    # )
-
-    # show_contours(
-    #     x_data=positions[4:-4],
-    #     y_data=velocities[4:-4],
-    #     z_data=policy.T[4:-4,4:-4],
-    #     title=f"Mountain Car Policy - REINFORCE, 2nd order polynomial",
-    #     filename=f"policy_{filename}.html",
-    #     project_z=False,
-    # )
-    show_cts_policy(
-        # title="REINFORCE States polynomial order 2 Policy without baseline",
-        title="REINFORCE Actions Current",
-        x_data=positions,
-        y_data=velocities,
+    output_policy = cts_to_discrete(
         z_data=final_data,
     )
+
+    show_contours(
+        x_data=positions,
+        y_data=velocities,
+        z_data=output_policy.T,
+        title=f"Mountain Car Policy - REINFORCE, 2nd order polynomial",
+        filename=f"policy.html",
+        project_z=False,
+    )
+    # show_cts_policy(
+    #     # title="REINFORCE States polynomial order 2 Policy without baseline",
+    #     title="REINFORCE Actions Current",
+    #     x_data=positions,
+    #     y_data=velocities,
+    #     z_data=final_data,
+    # )
 
     ##################### Neural Network Policy ######################
     # filename = "neural_network"
@@ -211,8 +230,4 @@ def main():
 
 
 if __name__ == "__main__":
-    # policy_weights = np.array([0, 100, 100000, 1, 0, 0, 5, 0, 0])
-    # baseline_weights = np.array([-1000, 1.753, 1.673, 40, 0, 0, 200, 0, 0])
-    # np.save("mountain_car/REINFORCE_states/weights/human/policy_weights_0.npy", policy_weights)
-    # np.save("mountain_car/REINFORCE_states/weights/human/baseline_weights_0.npy", baseline_weights)
     main()

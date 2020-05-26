@@ -1,12 +1,9 @@
-import os
 import numpy as np
 from pathlib import Path
 import torch
 import torch.optim as optim
 import torch.nn as nn
-import gym
 from collections import namedtuple
-from shutil import rmtree
 from typing import Tuple, List, Optional
 
 from algorithms.actor_critic import ActorCritic, ActorCriticParams
@@ -16,7 +13,7 @@ from algorithms.plotter import Plotter
 from algorithms.trainer import Trainer
 from algorithms.utils import generate_save_location
 
-from envs.atari.checking import get_average_score
+from envs.atari.get_avg_score import get_average_score
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"

@@ -13,7 +13,7 @@ def main():
         # "MountainCar-v0",
         # "Acrobot-v1",
     ]
-    # date = datetime.date.today().strftime("%d-%m-%Y")
+    date = datetime.date.today().strftime("%d-%m-%Y")
     num_demos = [1, 3, 10, 30, 100]
     num_epochs = 50
     minibatch_size = 64

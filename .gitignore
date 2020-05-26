@@ -7,7 +7,6 @@ report_materials/
 **/data/**
 **/concatenated/**
 **/expert_demos/**
-!meeting/**
 *.ipynb
 
 # Byte-compiled / optimized / DLL files

@@ -6,6 +6,7 @@ import torch
 from tqdm import tqdm
 from typing import Callable, Optional, Tuple
 from collections import namedtuple
+from time import sleep
 
 from algorithms.action_chooser import ActionChooser
 from algorithms.actor_critic import ActorCritic, ActorCriticParams
@@ -50,6 +51,9 @@ def run_solution(
             if demo_buffer is not None:
                 demo_buffer.update(state, action_chosen, reward=reward)
             state, reward, done, info = env.step(action_chosen)
+            if step == 0:
+                sleep(5)
+            # sleep(0.02)
             total_reward += reward
             done = step > episode_timeout if not done else done
             step += 1
@@ -112,32 +116,39 @@ def get_average_score(
 
 
 def main():
-    game_ref = 3
-    test_game_name = GAME_STRINGS_TEST[game_ref]
-    game_name = GAME_STRINGS_LEARN[game_ref]
-
-    # for game_ref in range(4):
-    print(game_name)
-    env = gym.make(game_name).env
-
-    network_load = f"../solved_networks/PPO_{game_name}.pth"
-    hidden_layers = (128, 128, 128, 128)
-    activation = "relu"
-    actor_critic_params = ActorCriticParams(
-        actor_layers=hidden_layers,
-        critic_layers=hidden_layers,
-        actor_activation=activation,
-        critic_activation=activation,
-        num_shared_layers=3,
-    )
-    get_average_score(
-        network_load=Path(network_load),
-        env=env,
-        episode_timeout=1000000,
-        show_solution=False,
-        num_trials=100,
-        params=actor_critic_params,
-    )
+    # game_ref = 0
+    # envs = ["CartPole-v1", "Acrobot-v1", "MountainCar-v0"]
+    envs = ["MountainCar-v0"]
+    for env in envs:
+        # test_game_name = GAME_STRINGS_TEST[game_ref]
+        # game_name = GAME_STRINGS_LEARN[game_ref]
+        # print(game_name)
+        print(env)
+        game_name = env
+        env = gym.make(game_name).env
+        # env = gym.make(test_game_name).env
+        # network_load = f"../../imitation_learning/data/BC/{game_name}/100-demos/BC-25-epochs_{n}.pth"
+        network_load = f"../../solved_networks/PPO_{game_name}.pth"
+        hidden_layers = (32, 32)
+        activation = "tanh"
+        # network_load = f"../../solved_networks/PPO_{game_name}.pth"
+        # hidden_layers = (128, 128, 128, 128)
+        # activation = "relu"
+        actor_critic_params = ActorCriticParams(
+            actor_layers=hidden_layers,
+            critic_layers=hidden_layers,
+            actor_activation=activation,
+            critic_activation=activation,
+            num_shared_layers=0,
+        )
+        get_average_score(
+            network_load=Path(network_load),
+            env=env,
+            episode_timeout=10000,
+            show_solution=True,
+            num_trials=5,
+            params=actor_critic_params,
+        )
 
 
 if __name__ == "__main__":

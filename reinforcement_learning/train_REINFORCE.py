@@ -128,7 +128,7 @@ class REINFORCETrainer(Trainer):
 def main():
     parser = get_actor_critic_parser(description="Parser for REINFORCE algorithm")
     args = parser.parse_args()
-    max_episodes = args.max_episodes if args.max_episodes is not None else 1000000
+    max_episodes = args.max_episodes if args.max_episodes is not None else 10000
     random_seeds = list(args.random_seeds)
     adv_type = args.adv_type
     nn_layers = (args.neurons_per_layer,) * args.num_layers
@@ -146,7 +146,7 @@ def main():
         learning_rate=learning_rate,
         epsilon=10000,  # clip parameter for PPO
         c1=args.value_coeff,  # value function hyperparam
-        c2=0,  # entropy hyperparam
+        c2=args.entropy_coeff,  # entropy hyperparam
         num_epochs=1,  # update policy for K epochs
     )
 

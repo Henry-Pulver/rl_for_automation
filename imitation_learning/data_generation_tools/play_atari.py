@@ -20,11 +20,11 @@ def generate_expert_data(game_ref: int, fps: int, num_demos: int, demo_start: in
 
 
 def main():
-    num_demos = 5
-    for demo_start in range(3, num_demos):
-        for game_ref in range(4, 5):
-            fps = 60
-            generate_expert_data(game_ref, fps, 1, demo_start)
+    num_demos = 10
+    fps = 60
+    game_ref = 0
+    demo_start = 7
+    generate_expert_data(game_ref, fps, num_demos, demo_start)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from algorithms.parser import get_ppo_parser
 
 
 def main():
-    parser = get_ppo_parser(description="Parser for PPO")
+    parser = get_ppo_parser(description="Parser for pretrained PPO")
     args = parser.parse_args()
 
     env_names = (
@@ -17,18 +17,18 @@ def main():
         else ["CartPole-v1", "Acrobot-v1", "MountainCar-v0"]
     )
     solved_rewards = (
-        [args.solved_reward] if args.solved_reward is not None else [195, -80, -135]
+        [args.solved_reward]
+        if args.solved_reward is not None
+        else [195, -80, -135]
     )  # stop training if avg_reward > solved_reward
-    worst_scores = (
-        [args.worst_score] if args.worst_score is not None else [9, -10000, -10000]
+    max_episodes = (
+        args.max_episodes if args.max_episodes is not None else 1000000
     )
-    max_episodes = args.max_episodes if args.max_episodes is not None else 1000000
     random_seeds = list(args.random_seeds)
     nn_layers = (args.neurons_per_layer,) * args.num_layers
     learning_rate = args.lr if args.lr is not None else 2e-3
     load_path = Path(args.load_path) if args.load_path is not None else None
 
-    outer_outcomes = []
     try:
         actor_critic_params = ActorCriticParams(
             actor_layers=nn_layers,
@@ -50,11 +50,11 @@ def main():
             beta=args.beta,  # fixed KL param
         )
         outcomes = []
-        for env_name, solved_reward, worst in zip(
-            env_names, solved_rewards, worst_scores
-        ):
+        for env_name, solved_reward in zip(env_names, solved_rewards):
             outcomes.append(env_name)
-            trainer = PPOTrainer(env_name, Path(args.save_base_path), date=args.date)
+            trainer = PPOTrainer(
+                env_name, Path(args.save_base_path), date=args.date
+            )
             outcomes.append(
                 trainer.train(
                     solved_reward=solved_reward,
@@ -68,17 +68,16 @@ def main():
                     ppo_type=args.ppo_type,
                     advantage_type=args.adv_type,
                     param_plot_num=args.param_plot_num,
-                    worst_performance=worst,
+                    worst_performance=args.worst_score,
                     policy_burn_in=args.burn_in_steps,
                     restart=args.r,
                     verbose=args.v,
                 )
             )
-        outer_outcomes.append(outcomes)
     finally:
         print(f"outcomes:")
-        for outer_outcome in outer_outcomes:
-            print(outer_outcome)
+        for outcome in outcomes:
+            print(outcome)
 
 
 if __name__ == "__main__":

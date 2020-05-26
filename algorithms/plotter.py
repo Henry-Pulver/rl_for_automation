@@ -119,7 +119,7 @@ class Plotter:
     ):
         self.verbose = verbose
         self.using_value = type(network_params) == ActorCriticParams
-        self.using_discrim = type(discrim_params) == DiscrimParams
+        self.using_discrim = discrim_params is not None
         self.save_path = save_path
         self.param_save = self.save_path / "params"
         self.param_names_array = []

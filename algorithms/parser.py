@@ -20,9 +20,6 @@ def get_ppo_parser(*args, **kwargs):
         "--d_targ", type=float, help="PPO adaptive KL param", default=0.01,
     )
     parser.add_argument(
-        "--entropy_coeff", type=float, help="entropy coefficient param", default=0.01,
-    )
-    parser.add_argument(
         "--num_epochs",
         type=int,
         help="number of epochs to train each T timesteps",
@@ -56,11 +53,16 @@ def get_actor_critic_parser(*args, **kwargs):
         "--value_coeff", type=float, help="value coefficient param", default=0.5,
     )
     parser.add_argument(
+        "--entropy_coeff", type=float, help="entropy coefficient param", default=0.01,
+    )
+    parser.add_argument(
         "--worst_score",
         type=float,
         help="used to determine if unstable - the worst score possible in the env",
     )
-    parser.add_argument("--burn_in_steps", type=int, help="number of burn in steps", default=0)
+    parser.add_argument(
+        "--burn_in_steps", type=int, help="number of burn in steps", default=0
+    )
     return parser
 
 
